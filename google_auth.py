@@ -25,7 +25,8 @@ def get_google_services():
             if not os.path.exists('credentials.json'):
                 raise FileNotFoundError("請確保 credentials.json 檔案存在於專案根目錄。")
             flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
+            # 固定 port 8080，避免隨機 port 導致部分環境授權失敗
+            creds = flow.run_local_server(port=8080)
         
         # 儲存下一次執行使用的憑證
         with open('token.json', 'w') as token:

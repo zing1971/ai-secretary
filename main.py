@@ -7,8 +7,8 @@ from llm_service import generate_report
 from line_service import send_line_message
 
 def main():
-    # 1. 載入環境變數
-    load_dotenv()
+    # 1. 載入環境變數（強制覆蓋系統現有變數）
+    load_dotenv(override=True)
     
     # 2. 取得 Google 服務
     try:
