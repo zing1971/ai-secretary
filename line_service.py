@@ -1,35 +1,32 @@
-import os
-import requests
+from linebot import LineBotApi, WebhookHandler
+from linebot.models import TextSendMessage
+from config import Config, logger
 
-def send_line_message(message):
-    """透過 Line Messaging API 傳送訊息。"""
-    line_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-    user_id = os.getenv("LINE_USER_ID")
-    
-    if not line_token or not user_id:
-        print("未設定 LINE_CHANNEL_ACCESS_TOKEN 或 LINE_USER_ID，訊息將輸出至控制台。")
-        print("-" * 20)
-        print(message)
-        print("-" * 20)
-        return
-    
-    url = "https://api.line.me/v2/bot/message/push"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {line_token}"
-    }
-    payload = {
-        "to": user_id,
-        "messages": [
-            {
-                "type": "text",
-                "text": message
-            }
-        ]
-    }
-    
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code != 200:
-        print(f"Line 訊息傳送失敗: {response.text}")
-    else:
-        print("Line 訊息傳送成功！")
+class LineService:
+    def __init__(self):
+        self.api = LineBotApi(Config.LINE_CHANNEL_ACCESS_TOKEN)
+        self.handler = WebhookHandler(Config.LINE_CHANNEL_SECRET)
+        self.user_id = Config.LINE_USER_ID
+
+    def push_text(self, text, to_user_id=None):
+        """主動推送純文字訊息"""
+        target = to_user_id or self.user_id
+        try:
+            self.api.push_message(target, TextSendMessage(text=text))
+            logger.info(f"成功推送訊息至 {target}")
+            return True
+        except Exception as e:
+            logger.error(f"推送訊息失敗: {e}")
+            return False
+
+    def reply_text(self, reply_token, text):
+        """回覆訊息"""
+        try:
+            self.api.reply_message(reply_token, TextSendMessage(text=text))
+            return True
+        except Exception as e:
+            logger.error(f"回覆訊息失敗: {e}")
+            return False
+
+# 單一實例供全域使用
+line_service = LineService()

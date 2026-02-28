@@ -7,7 +7,7 @@ load_dotenv(override=True)
 
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 
-def create_and_link_rich_menu(user_id, image_path="rich_menu.png"):
+def create_and_link_rich_menu(user_id, image_path="rich_menu.jpg"):
     """
     建立 Rich Menu、上傳背景圖片並綁定給指定使用者。
     """
@@ -20,21 +20,21 @@ def create_and_link_rich_menu(user_id, image_path="rich_menu.png"):
     # 1. 定義 Rich Menu 結構 (3 格: 行程, 主動處理, 信件)
     # 注意：這裡的 size 與背景圖片解析度需匹配 (2500x843 或 2500x1686)
     rich_menu_data = {
-        "size": {"width": 2500, "height": 1686},
+        "size": {"width": 2500, "height": 843},
         "selected": True,
         "name": "AI Secretary Premium Menu",
         "chatBarText": "📂 秘書選單",
         "areas": [
             {
-                "bounds": {"x": 0, "y": 0, "width": 833, "height": 1686},
+                "bounds": {"x": 0, "y": 0, "width": 833, "height": 843},
                 "action": {"type": "message", "text": "今天有什麼行程？"}
             },
             {
-                "bounds": {"x": 833, "y": 0, "width": 834, "height": 1686},
+                "bounds": {"x": 833, "y": 0, "width": 834, "height": 843},
                 "action": {"type": "message", "text": "幫我整理今日代辦並起草回信"}
             },
             {
-                "bounds": {"x": 1667, "y": 0, "width": 833, "height": 1686},
+                "bounds": {"x": 1667, "y": 0, "width": 833, "height": 843},
                 "action": {"type": "message", "text": "有新信件嗎？"}
             }
         ]
@@ -58,7 +58,7 @@ def create_and_link_rich_menu(user_id, image_path="rich_menu.png"):
     with open(image_path, 'rb') as f:
         img_headers = {
             'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}',
-            'Content-Type': 'image/png'
+            'Content-Type': 'image/jpeg'
         }
         upload_response = requests.post(
             f'https://api-data.line.me/v2/bot/richmenu/{rich_menu_id}/content',

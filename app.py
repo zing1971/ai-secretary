@@ -1,178 +1,124 @@
-import os
-import sys
+import asyncio
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
-from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
-from dotenv import load_dotenv
-from intent_router import IntentRouter
-from google_auth import get_google_services
-from calendar_service import get_todays_events
-from gmail_service import get_recent_emails, create_gmail_draft
-from tasks_service import create_google_task
-from llm_service import analyze_for_actions
-from scheduler_service import setup_scheduler
+from linebot.models import MessageEvent, TextMessage
 from contextlib import asynccontextmanager
 
-# 載入環境變數
-load_dotenv(override=True)
+from config import Config, logger
+from line_service import LineService
+from google_auth import get_google_services
+from llm_service import LLMService
+from intent_router import IntentRouter
+from action_dispatcher import ActionDispatcher
+from scheduler_service import setup_scheduler, send_morning_briefing
 
+# 初始化全句服務實例 (由 lifespan 管理生命週期)
+line_service = LineService()
+llm_service = LLMService(Config.GEMINI_API_KEY)
+intent_router = IntentRouter(Config.GEMINI_API_KEY)
+global_dispatcher = None
+
+# 1. FastAPI Lifespan 管理
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 啟動時執行：啟動排程器
-    scheduler = setup_scheduler(line_bot_api, my_user_id)
-    yield
-    # 關閉時執行：停止排程器
-    scheduler.shutdown()
-
-app = FastAPI(title="AI Secretary Line Webhook", lifespan=lifespan)
-
-line_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-line_secret = os.getenv("LINE_CHANNEL_SECRET")
-my_user_id = os.getenv("LINE_USER_ID")
-
-if not line_token or not line_secret or not my_user_id:
-    print("請確保 .env 檔案中已設定 LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET 與 LINE_USER_ID")
-    sys.exit(1)
-
-line_bot_api = LineBotApi(line_token)
-handler = WebhookHandler(line_secret)
-
-# 初始化意圖路由器
-intent_router = IntentRouter()
-
-def get_services():
-    """取得 Google 各項服務實例。"""
+    global global_dispatcher
+    logger.info("正在啟動 AI 秘書服務...")
+    
     try:
-        return get_google_services()
+        # 取得 Google 服務
+        gmail, calendar, tasks, sheets = get_google_services()
+        
+        # 初始化全域分流器
+        global_dispatcher = ActionDispatcher(
+            line_service, 
+            llm_service, 
+            gmail, 
+            calendar, 
+            tasks, 
+            sheets
+        )
+        
+        # 設定排程器
+        scheduler = setup_scheduler(line_service.api, line_service.user_id)
+        app.state.scheduler = scheduler
+        logger.info("✅ 背景服務與排程器已就緒。")
     except Exception as e:
-        print(f"取得 Google 服務失敗: {e}")
-        return None, None, None
+        logger.error(f"❌ 啟動失敗: {e}")
+        raise e
 
+    yield
+    
+    logger.info("正在停止 AI 秘書服務...")
+    if hasattr(app.state, "scheduler"):
+        app.state.scheduler.shutdown()
+
+# 2. 初始化應用
+app = FastAPI(title="AI Secretary System", lifespan=lifespan)
+
+# 3. Web 介面入口
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return "<h1>AI Secretary Webhook is running!</h1>"
+    return """
+    <html>
+        <head><title>AI Secretary</title></head>
+        <body style="font-family: Arial; text-align: center; padding-top: 50px;">
+            <h1>🤖 AI 秘書伺服器正在運行中</h1>
+            <p>與您的 LINE Bot 互動來管理所有事務。</p>
+        </body>
+    </html>
+    """
 
+# 4. LINE Webhook Handler
 @app.post("/callback")
 async def callback(request: Request):
-    # 取得 X-Line-Signature 標頭值
     signature = request.headers.get("X-Line-Signature", "")
-
-    # 取得請求內容
     body = await request.body()
     body_str = body.decode("utf-8")
 
-    # 處理 webhook 內容
     try:
-        handler.handle(body_str, signature)
+        line_service.handler.handle(body_str, signature)
     except InvalidSignatureError:
-        print("Invalid signature. Please check your channel access token/channel secret.")
+        logger.warning("身分驗證簽名錯誤，請檢查 Secret 金鑰。")
         raise HTTPException(status_code=400, detail="Invalid signature.")
+    except Exception as e:
+        logger.error(f"Webhook 處理異常: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error.")
 
     return "OK"
 
-@handler.add(MessageEvent, message=TextMessage)
+# 5. LINE 訊息處理邏輯
+@line_service.handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_id = event.source.user_id
-    user_message = event.message.text
+    user_message = event.message.text.strip()
     
-    print(f"收到來自 {user_id} 的訊息: {user_message}")
+    logger.info(f"收到來自 {user_id} 的訊息: {user_message}")
 
-    # 權限控管：只處理主人的訊息
-    if user_id != my_user_id:
-        print(f"非授權使用者 ({user_id}) 嘗試操作，已忽略。")
+    # A. 權限控管
+    if user_id != line_service.user_id:
+        logger.warning(f"偵測到非授權使用者 ({user_id})，拒絕服務。")
         return
 
-    # 取得 Google 服務
-    gmail_service, calendar_service, tasks_service = get_services()
-
-    # 隱藏指令：手動測試排程推送
-    if user_message.strip() == "測試排程":
-        from scheduler_service import send_morning_briefing
-        import asyncio
-        # 使用背景任務執行，避免阻塞 LINE Webhook
-        asyncio.create_task(send_morning_briefing(line_bot_api, user_id))
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text="好的老闆，正在為您即時模擬『早安簡報』推送程序，請稍候...")
-        )
+    # B. 手動指令：測試排程推送
+    if user_message == "測試排程":
+        asyncio.create_task(send_morning_briefing(line_service.api, user_id))
+        line_service.reply_text(event.reply_token, "好的老闆，正在為您即時模擬『早安簡報』推送程序，請稍候...")
         return
 
-    # 呼叫意圖分析
-    analysis_result = intent_router.analyze_intent(user_message)
-    intent = analysis_result.get("intent", "Unknown")
-    reply_text = analysis_result.get("reply_message", "抱歉老闆，我無法理解您的指令。")
+    # C. 常規流程：意圖分析
+    analysis_result = intent_router.classify_intent(user_message)
+    intent = analysis_result.get("intent", "Chat")
     
-    print(f"判斷意圖為: {intent}")
-    
-    additional_info = ""
-    # 根據意圖執行不同動作
-    if intent == "Query_Calendar":
-        if calendar_service:
-            try:
-                events = get_todays_events(calendar_service)
-                if events:
-                    additional_info = "\n\n【最新行程資料】\n" + "\n".join(events)
-                else:
-                    additional_info = "\n\n【訊息記錄】\n今天似乎沒有其它已排定的行程。"
-            except Exception as e:
-                additional_info = f"\n\n(行事曆讀取失敗: {e})"
-        else:
-            additional_info = "\n\n(抱歉，行事曆服務目前無法連線)"
-            
-    elif intent == "Query_Email":
-        if gmail_service:
-            try:
-                emails = get_recent_emails(gmail_service)
-                if emails:
-                    summaries = [e['summary_text'] for e in emails[:5]]
-                    additional_info = "\n\n【信件清單】\n" + "\n".join(summaries)
-                else:
-                    additional_info = "\n\n【訊息記錄】\n過去 24 小時內沒有偵測到未讀信件。"
-            except Exception as e:
-                additional_info = f"\n\n(信件讀取失敗: {e})"
-        else:
-            additional_info = "\n\n(抱歉，信箱服務目前無法連線)"
+    logger.info(f"AI 識別意圖：{intent}")
 
-    elif intent == "Proactive_Process":
-        if not gmail_service or not calendar_service or not tasks_service:
-            additional_info = "\n\n抱歉老闆，Google 服務授權不全或連線失敗，無法處理主動任務。"
-        else:
-            # 取得原始資料
-            try:
-                events = get_todays_events(calendar_service)
-                emails = get_recent_emails(gmail_service)
-                
-                # 進行 AI 主動分析
-                action_data = analyze_for_actions(events, emails)
-                
-                # 執行動作 1: 建立 Google Tasks 任務
-                tasks_created = 0
-                for task in action_data.get('tasks', []):
-                    create_google_task(tasks_service, task.get('title'), task.get('notes'), task.get('due'))
-                    tasks_created += 1
-                
-                # 執行動作 2: 建立 Gmail 回覆草稿
-                drafts_created = 0
-                for draft in action_data.get('drafts', []):
-                    create_gmail_draft(gmail_service, draft.get('to'), draft.get('subject'), draft.get('body'), draft.get('threadId'))
-                    drafts_created += 1
-                
-                # 組合結果回應
-                briefing = action_data.get('briefing', '已為您處理完畢。')
-                additional_info = f"\n\n【秘書處理報告】\n{briefing}\n\n已成功為您新增 {tasks_created} 項任務，並擬定 {drafts_created} 封信件草稿。"
-            except Exception as e:
-                additional_info = f"\n\n主動處理時發生錯誤：{str(e)}"
-    
-    # 將 AI 回覆和撈取到的資料組合
-    final_reply = reply_text + additional_info
-    
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=final_reply)
-    )
+    # D. 根據意圖調派業務邏輯
+    if global_dispatcher:
+        # 傳遞 reply_token 以利回覆
+        global_dispatcher.dispatch(intent, user_message, user_id, reply_token=event.reply_token)
+    else:
+        line_service.reply_text(event.reply_token, "系統初始化中，請稍後再試。")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=Config.PORT)
