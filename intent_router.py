@@ -31,7 +31,9 @@ class IntentRouter:
 1. "General_Chat": 一般對話、閒聊、不明確的操作。
 2. "Query_Calendar": 查詢行程 (例如：今天下午有什麼會、明天早上忙嗎)。
 3. "Query_Email": 查詢信件 (例如：有沒有收到經理的信)。
+4. "Proactive_Process": 請求主動處理事務 (例如：幫我處理今天的信件與任務、萃取待辦、起草回覆)。
 
+對於 "Proactive_Process"，請回覆確認接收指令，稍後我們會在外部程式碼進行實際的 API 呼叫。
 對於 "General_Chat"，請在 `reply_message` 中直接給予合適的秘書口吻回覆。
 """
 

@@ -4,12 +4,12 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
-from dotenv import load_dotenv
 from intent_router import IntentRouter
 from google_auth import get_google_services
 from calendar_service import get_todays_events
-from gmail_service import get_recent_emails
+from gmail_service import get_recent_emails, create_gmail_draft
+from tasks_service import create_google_task
+from llm_service import analyze_for_actions
 
 # 載入環境變數
 load_dotenv(override=True)
@@ -31,11 +31,12 @@ handler = WebhookHandler(line_secret)
 intent_router = IntentRouter()
 
 # 全局變數暫存服務 (為簡化先在此取得)
-gmail_service, calendar_service = None, None
+gmail_service, calendar_service, tasks_service = None, None, None
 try:
-    gmail_service, calendar_service = get_google_services()
+    gmail_service, calendar_service, tasks_service = get_google_services()
 except Exception as e:
     print(f"啟動時 Google 驗證失敗: {e}")
+    print("請手動刪除 token.json 並重新授權。")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -78,8 +79,8 @@ def handle_message(event):
     
     print(f"判斷意圖為: {intent}")
     
-    # 根據意圖執行不同動作
     additional_info = ""
+    # 根據意圖執行不同動作
     if intent == "Query_Calendar":
         if calendar_service:
             events = get_todays_events(calendar_service)
@@ -94,11 +95,38 @@ def handle_message(event):
         if gmail_service:
             emails = get_recent_emails(gmail_service)
             if emails:
-                additional_info = "\n\n【信件清單】\n" + "\n".join(emails[:5]) # 避免超過字數限制，先取前五封
+                summaries = [e['summary_text'] for e in emails[:5]]
+                additional_info = "\n\n【信件清單】\n" + "\n".join(summaries)
             else:
                 additional_info = "\n\n【訊息記錄】\n過去 24 小時內沒有偵測到未讀信件。"
         else:
             additional_info = "\n\n(抱歉，信箱服務目前無法連線)"
+
+    elif intent == "Proactive_Process":
+        if not gmail_service or not calendar_service or not tasks_service:
+            additional_info = "\n\n抱歉老闆，Google 服務未完全連線，無法進行完整處理。"
+        else:
+            # 取得原始資料
+            events = get_todays_events(calendar_service)
+            emails = get_recent_emails(gmail_service)
+            
+            # 進行 AI 主動分析
+            try:
+                action_data = analyze_for_actions(events, emails)
+                
+                # 執行動作 1: 建立 Google Tasks 任務
+                for task in action_data.get('tasks', []):
+                    create_google_task(tasks_service, task.get('title'), task.get('notes'), task.get('due'))
+                
+                # 執行動作 2: 建立 Gmail 回覆草稿
+                for draft in action_data.get('drafts', []):
+                    create_gmail_draft(gmail_service, draft.get('to'), draft.get('subject'), draft.get('body'), draft.get('threadId'))
+                
+                # 組合結果回應
+                briefing = action_data.get('briefing', '已為您處理完畢。')
+                additional_info = f"\n\n【秘書處理報告】\n{briefing}\n\n已成功為您新增 {len(action_data.get('tasks', []))} 項任務，並擬定 {len(action_data.get('drafts', []))} 封信件草稿。"
+            except Exception as e:
+                additional_info = f"\n\n處理時發生錯誤：{str(e)}"
     
     # 將 AI 回覆和撈取到的資料組合
     final_reply = reply_text + additional_info

@@ -7,11 +7,13 @@ from googleapiclient.discovery import build
 # 如果修改這些 SCOPES，請刪除 token.json。
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/calendar.readonly'
+    'https://www.googleapis.com/auth/gmail.compose',
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/tasks'
 ]
 
 def get_google_services():
-    """取得 Gmail 與 Calendar API 服務。"""
+    """取得 Gmail、Calendar 與 Tasks API 服務。"""
     creds = None
     # token.json 儲存使用者的存取與重新整理權杖。
     if os.path.exists('token.json'):
@@ -34,5 +36,6 @@ def get_google_services():
 
     gmail_service = build('gmail', 'v1', credentials=creds)
     calendar_service = build('calendar', 'v3', credentials=creds)
+    tasks_service = build('tasks', 'v1', credentials=creds)
     
-    return gmail_service, calendar_service
+    return gmail_service, calendar_service, tasks_service
