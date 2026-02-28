@@ -18,11 +18,22 @@ logging.basicConfig(
 logger = logging.getLogger("AI-Secretary")
 
 class Config:
-    LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-    LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
-    LINE_USER_ID = os.getenv("LINE_USER_ID")
-    GEMINI_API_KEY = clean_api_key(os.getenv("GEMINI_API_KEY", ""))
-    GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+    @staticmethod
+    def _get_env(key, default=None):
+        # 雲端環境中可能不小心在變數名尾端多加了空白，這裡進行徹底比對
+        val = os.getenv(key)
+        if val is None:
+            # 嘗試搜尋是否有帶空白的同名變數
+            for k, v in os.environ.items():
+                if k.strip() == key:
+                    return v
+        return val if val is not None else default
+
+    LINE_CHANNEL_ACCESS_TOKEN = _get_env.__func__("LINE_CHANNEL_ACCESS_TOKEN")
+    LINE_CHANNEL_SECRET = _get_env.__func__("LINE_CHANNEL_SECRET")
+    LINE_USER_ID = _get_env.__func__("LINE_USER_ID")
+    GEMINI_API_KEY = clean_api_key(_get_env.__func__("GEMINI_API_KEY", ""))
+    GOOGLE_SHEET_ID = _get_env.__func__("GOOGLE_SHEET_ID")
     
     PORT = int(os.getenv("PORT", 8080))
     DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
