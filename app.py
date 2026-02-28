@@ -12,11 +12,21 @@ from calendar_service import get_todays_events
 from gmail_service import get_recent_emails, create_gmail_draft
 from tasks_service import create_google_task
 from llm_service import analyze_for_actions
+from scheduler_service import setup_scheduler
+from contextlib import asynccontextmanager
 
 # 載入環境變數
 load_dotenv(override=True)
 
-app = FastAPI(title="AI Secretary Line Webhook")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 啟動時執行：啟動排程器
+    scheduler = setup_scheduler(line_bot_api, my_user_id)
+    yield
+    # 關閉時執行：停止排程器
+    scheduler.shutdown()
+
+app = FastAPI(title="AI Secretary Line Webhook", lifespan=lifespan)
 
 line_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 line_secret = os.getenv("LINE_CHANNEL_SECRET")
@@ -76,6 +86,18 @@ def handle_message(event):
 
     # 取得 Google 服務
     gmail_service, calendar_service, tasks_service = get_services()
+
+    # 隱藏指令：手動測試排程推送
+    if user_message.strip() == "測試排程":
+        from scheduler_service import send_morning_briefing
+        import asyncio
+        # 使用背景任務執行，避免阻塞 LINE Webhook
+        asyncio.create_task(send_morning_briefing(line_bot_api, user_id))
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="好的老闆，正在為您即時模擬『早安簡報』推送程序，請稍候...")
+        )
+        return
 
     # 呼叫意圖分析
     analysis_result = intent_router.analyze_intent(user_message)
