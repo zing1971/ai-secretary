@@ -12,6 +12,15 @@ SCOPES = [
     'https://www.googleapis.com/auth/tasks'
 ]
 
+def clean_api_key(api_key: str) -> str:
+    """清理 API KEY (處理引號與重複貼上問題)。"""
+    if not api_key:
+        return ""
+    api_key = api_key.strip().replace('"', '').replace("'", "")
+    if len(api_key) == 78:
+        api_key = api_key[:39]
+    return api_key
+
 def get_google_services():
     """取得 Gmail、Calendar 與 Tasks API 服務。"""
     creds = None

@@ -1,6 +1,7 @@
 import os
 import json
 from google import genai
+from google_auth import clean_api_key
 
 class IntentRouter:
     def __init__(self):
@@ -9,10 +10,7 @@ class IntentRouter:
         if not api_key:
             raise ValueError("請設定 GEMINI_API_KEY 環境變數。")
             
-        api_key = api_key.strip().replace('"', '').replace("'", "")
-        if len(api_key) == 78:
-            api_key = api_key[:39]
-            
+        api_key = clean_api_key(api_key)
         self.client = genai.Client(api_key=api_key)
         self.system_instruction = self._build_system_instruction()
 

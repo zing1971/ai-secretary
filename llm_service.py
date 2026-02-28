@@ -1,6 +1,7 @@
 from google import genai
 import os
 import json
+from google_auth import clean_api_key
 
 def generate_report(events, emails, prompt_path):
     """使用最新 Google GenAI SDK 生成行政秘書匯報。"""
@@ -8,10 +9,7 @@ def generate_report(events, emails, prompt_path):
     if not api_key:
         raise ValueError("請設定 GEMINI_API_KEY 環境變數。")
     
-    # 清理 API KEY (處理可能重複貼上的問題)
-    api_key = api_key.strip().replace('"', '').replace("'", "")
-    if len(api_key) == 78:
-        api_key = api_key[:39]
+    api_key = clean_api_key(api_key)
     
     # 初始化最新 Client
     client = genai.Client(api_key=api_key)
@@ -69,5 +67,4 @@ def analyze_for_actions(events, emails):
         }
     )
     
-    import json as json_lib
-    return json_lib.loads(response.text)
+    return json.loads(response.text)
