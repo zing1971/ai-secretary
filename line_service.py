@@ -2,6 +2,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.models import TextSendMessage
 from config import Config, logger
 
+
 class LineService:
     def __init__(self):
         self.api = LineBotApi(Config.LINE_CHANNEL_ACCESS_TOKEN)
@@ -28,5 +29,4 @@ class LineService:
             logger.error(f"回覆訊息失敗: {e}")
             return False
 
-# 單一實例供全域使用
-line_service = LineService()
+# ⚠️ 不再在模組層級建立實例，改由 app.py 控制
