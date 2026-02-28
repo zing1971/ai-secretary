@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
+from dotenv import load_dotenv
 from intent_router import IntentRouter
 from google_auth import get_google_services
 from calendar_service import get_todays_events
