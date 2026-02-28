@@ -16,15 +16,31 @@ async def send_morning_briefing(line_bot_api, user_id):
     
     try:
         # 1. 取得服務
-        gmail_service, calendar_service, tasks_service = get_google_services()
+        gmail_service, calendar_service, tasks_service, sheets_service = get_google_services()
         
-        if not all([gmail_service, calendar_service, tasks_service]):
+        if not all([gmail_service, calendar_service, tasks_service, sheets_service]):
             logger.warning("Google 服務授權不全，取消簡報。")
             return
 
         # 2. 使用 Dispatcher 處理主動流程 (共用邏輯)
-        dispatcher = ActionDispatcher()
-        report = dispatcher.handle_proactive_process(gmail_service, calendar_service, tasks_service)
+        from line_service import LineService
+        from llm_service import LLMService
+        from config import Config
+        from action_dispatcher import ActionDispatcher
+        
+        # 建立簡報專屬的 Dispatcher 環境
+        ls = LineService() # 用於發送
+        llm = LLMService(Config.GEMINI_API_KEY)
+        
+        dispatcher = ActionDispatcher(
+            ls, 
+            llm, 
+            gmail_service, 
+            calendar_service, 
+            tasks_service, 
+            sheets_service
+        )
+        report = dispatcher.handle_proactive_process()
         
         # 3. 組合推送訊息
         push_msg = f"🌅 【早安簡報】\n{report}"
