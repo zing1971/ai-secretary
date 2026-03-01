@@ -156,13 +156,36 @@ class ActionDispatcher:
                 self._send_response(user_id, reply_token, final_response)
                 
             elif intent == "Query_Email":
-                emails = get_recent_emails(self.gmail)
+                search_keyword = intent_data.get("search_keyword", "")
+                emails = get_recent_emails(self.gmail, query=search_keyword)
+                
                 if emails:
-                    summaries = [e['summary_text'] for e in emails[:5]]
-                    msg = "\n".join(summaries)
-                    self._send_response(user_id, reply_token, f"📧 仁哥，以下是最新的信件：\n{msg}")
+                    # 簡單判別是否為擬稿指令
+                    draft_keywords = ["回信", "回覆", "擬稿", "草擬", "草稿", "答覆", "寫信"]
+                    is_drafting = any(kw in user_msg for kw in draft_keywords)
+                    memories = self.memory.fetch_relevant_memories(user_msg)
+                    
+                    if is_drafting:
+                        # 挑選第一封信（假設為最相關）進行草稿生成
+                        target_email = emails[0]
+                        draft_body = self.llm.generate_email_draft_reply(target_email, user_msg, memories)
+                        
+                        # 呼叫 Gmail API 建立草稿
+                        create_gmail_draft(
+                            self.gmail,
+                            to_address=target_email['sender'],
+                            subject=f"Re: {target_email['subject']}",
+                            body_text=draft_body,
+                            thread_id=target_email.get('threadId')
+                        )
+                        
+                        self._send_response(user_id, reply_token, f"✅ 仁哥，已經幫您在 Gmail 草擬好回信給「{target_email['sender']}」了！\n\n草稿內容如下：\n{draft_body}")
+                    else:
+                        # 摘要分析信件
+                        summary_msg = self.llm.format_email_summary(emails, user_msg, memories, search_keyword)
+                        self._send_response(user_id, reply_token, summary_msg)
                 else:
-                    self._send_response(user_id, reply_token, "仁哥，目前沒有未讀信件，信箱很乾淨喔 ✨")
+                    self._send_response(user_id, reply_token, "仁哥，為您搜尋後目前沒有符合的相關信件。")
         except Exception as e:
             logger.error(f"處理分派時異常: {e}")
             self._send_response(user_id, reply_token, f"仁哥抱歉，Alice 處理時遇到了問題：{str(e)} 🙇‍♀️")
