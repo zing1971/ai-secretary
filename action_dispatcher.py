@@ -252,7 +252,7 @@ class ActionDispatcher:
                     create_google_task(self.tasks, t.get('title'), t.get('notes'), t.get('due'))
                     tasks_created += 1
             
-            # 建立聯絡人
+            # 建立聯絡人（附帶名片影像）
             for c in analysis_data.get('contacts', []):
                 if self.people:
                     create_contact(
@@ -261,7 +261,8 @@ class ActionDispatcher:
                         company=c.get('company', ''), 
                         job_title=c.get('job_title', ''), 
                         email=c.get('email', ''), 
-                        phone=c.get('phone', '')
+                        phone=c.get('phone', ''),
+                        photo_bytes=image_bytes
                     )
                     contacts_created += 1
 
