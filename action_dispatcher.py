@@ -3,6 +3,7 @@ import pytz
 from calendar_service import get_todays_events, get_events
 from gmail_service import get_recent_emails, create_gmail_draft
 from tasks_service import create_google_task
+from contacts_service import create_contact
 from llm_service import LLMService
 from config import logger
 from line_service import LineService
@@ -15,13 +16,14 @@ class ActionDispatcher:
     """處理各類意圖對應的業務邏輯。"""
     
     def __init__(self, line_service: LineService, llm_service: LLMService,
-                 gmail, calendar, tasks, sheets, drive=None):
+                 gmail, calendar, tasks, sheets, drive=None, people=None):
         self.line = line_service
         self.llm = llm_service
         self.gmail = gmail
         self.calendar = calendar
         self.tasks = tasks
         self.sheets = sheets
+        self.people = people
 
         # 初始化 Pinecone 向量記憶服務
         pinecone_mem = PineconeMemory()
@@ -232,12 +234,51 @@ class ActionDispatcher:
     def dispatch_image(self, image_bytes: bytes, user_id: str, reply_token: str):
         """處理收到的圖片訊息"""
         logger.info("分派圖片處理")
-        self._send_response(user_id, reply_token, "📸 收到圖片！Alice 正在幫您分析中，請稍候... ⏳")
+        self._send_response(user_id, reply_token, "📸 收到圖片！Alice 正在幫您分析並處理成結構化資料中，請稍候... ⏳")
         try:
-            response_text = self.llm.analyze_image_for_actions(image_bytes)
-            # 由於前面的 reply_token 已經用來回覆「分析中」，這裡使用 push_text
-            self.line.push_text(response_text, to_user_id=user_id)
+            analysis_data = self.llm.analyze_image_for_actions(image_bytes)
+            
+            # 如果回傳的是純文字錯誤訊息，直接推送
+            if isinstance(analysis_data, str):
+                self.line.push_text(analysis_data, to_user_id=user_id)
+                return
+
+            tasks_created = 0
+            contacts_created = 0
+            
+            # 建立任務
+            for t in analysis_data.get('tasks', []):
+                if self.tasks:
+                    create_google_task(self.tasks, t.get('title'), t.get('notes'), t.get('due'))
+                    tasks_created += 1
+            
+            # 建立聯絡人
+            for c in analysis_data.get('contacts', []):
+                if self.people:
+                    create_contact(
+                        self.people, 
+                        name=c.get('name', ''), 
+                        company=c.get('company', ''), 
+                        job_title=c.get('job_title', ''), 
+                        email=c.get('email', ''), 
+                        phone=c.get('phone', '')
+                    )
+                    contacts_created += 1
+
+            briefing = analysis_data.get('briefing', '已為您處理圖片完畢。')
+            
+            # 組合成果
+            summary_parts = []
+            if tasks_created > 0:
+                summary_parts.append(f"✅ 自動建立了 {tasks_created} 項 Google 待辦任務")
+            if contacts_created > 0:
+                summary_parts.append(f"📇 自動建立了 {contacts_created} 筆 Google 聯絡人")
+            
+            if summary_parts:
+                briefing += "\n\n" + "\n".join(summary_parts)
+
+            self.line.push_text(briefing, to_user_id=user_id)
         except Exception as e:
-            logger.error(f"圖片分析分派失敗: {e}")
-            self.line.push_text("仁哥抱歉，Alice在分析這張圖片時遇到了問題 🙇‍♀️", to_user_id=user_id)
+            logger.error(f"圖片分析分派失敗: {e}", exc_info=True)
+            self.line.push_text("仁哥抱歉，Alice在處理這張圖片時遇到了問題 🙇‍♀️", to_user_id=user_id)
 

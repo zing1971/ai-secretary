@@ -12,7 +12,8 @@ SCOPES = [
     'https://www.googleapis.com/auth/calendar.readonly',
     'https://www.googleapis.com/auth/tasks',
     'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/drive'
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/contacts'
 ]
 
 def clean_api_key(api_key: str) -> str:
@@ -75,5 +76,6 @@ def get_google_services():
     tasks_service = build('tasks', 'v1', credentials=creds)
     sheets_service = build('sheets', 'v4', credentials=creds)
     drive_service = build('drive', 'v3', credentials=creds)
+    people_service = build('people', 'v1', credentials=creds)
     
-    return gmail_service, calendar_service, tasks_service, sheets_service, drive_service
+    return gmail_service, calendar_service, tasks_service, sheets_service, drive_service, people_service

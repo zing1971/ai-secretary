@@ -64,12 +64,12 @@ async def _initialize_all_services(app):
         S.intent_router = IntentRouter(Config.GEMINI_API_KEY)
         logger.info("✅ AI 服務就緒")
 
-        gmail, calendar, tasks, sheets, drive = get_google_services()
+        gmail, calendar, tasks, sheets, drive, people = get_google_services()
         logger.info("✅ Google 服務就緒")
 
         S.dispatcher = ActionDispatcher(
             S.line_service, S.llm_service,
-            gmail, calendar, tasks, sheets, drive
+            gmail, calendar, tasks, sheets, drive, people
         )
         logger.info("✅ Dispatcher 就緒")
 
