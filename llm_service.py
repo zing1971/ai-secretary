@@ -135,22 +135,32 @@ class LLMService:
         if not existing_facts:
             return {"has_conflict": False}
 
-        existing_text = "\n".join([f"- {f}" for f in existing_facts])
-        prompt = f"""你是 Alice，仁哥的私人秘書。請判斷以下「新事實」是否與「既有記憶」中的任何一條矛盾或重複。
+        # 建立帶編號的清單，讓 LLM 精確回傳 index
+        numbered_list = "\n".join(
+            [f"[{i}] {f}" for i, f in enumerate(existing_facts)]
+        )
+        prompt = f"""你是 Alice，仁哥的私人秘書。請判斷「新事實」是否與「既有記憶」中的任何一條矛盾或重複。
 
 【新事實】
 {new_fact}
 
-【既有記憶（同分類）】
-{existing_text}
+【既有記憶清單】（每條前面有編號 [0], [1], [2]...）
+{numbered_list}
 
 【判斷規則】
-- 如果新事實更新了舊事實（例如「喜歡拿鐵」取代「喜歡黑咖啡」）→ 衝突，需要更新
-- 如果新事實是舊事實的補充（不矛盾）→ 不衝突
-- 如果新事實與舊事實幾乎相同 → 重複
+1. 如果新事實與某條舊記憶「幾乎相同」或「意思一樣」→ has_conflict=true, is_duplicate=true
+2. 如果新事實「更新/取代」了某條舊記憶（例如新偏好取代舊偏好）→ has_conflict=true, is_duplicate=false
+3. 如果新事實與所有舊記憶都不相關 → has_conflict=false
 
-請輸出 JSON：
-{{"has_conflict": true/false, "conflict_index": 被衝突的記憶編號(0起算)或null, "reason": "簡短說明"}}
+【範例判斷】
+新：「仁哥喜歡拿鐵」 vs 舊[2]：「仁哥喜歡黑咖啡」→ 衝突更新(has_conflict=true, is_duplicate=false, conflict_index=2)
+新：「仁哥喜歡黑咖啡」 vs 舊[1]：「仁哥喜歡黑咖啡不加糖」→ 重複(has_conflict=true, is_duplicate=true, conflict_index=1)
+新：「仁哥對花生過敏」 vs 舊都不相關 → 無衝突(has_conflict=false)
+
+回傳 JSON 格式：
+{{"has_conflict": true, "is_duplicate": false, "conflict_index": 0, "reason": "說明"}}
+或
+{{"has_conflict": false, "is_duplicate": false, "conflict_index": null, "reason": "無衝突"}}
 """
         try:
             response = self.client.models.generate_content(
@@ -158,7 +168,9 @@ class LLMService:
                 contents=prompt,
                 config={'response_mime_type': 'application/json'}
             )
-            return json.loads(response.text)
+            result = json.loads(response.text)
+            logger.info(f"🤖 衝突偵測 LLM 原始回傳: {result}")
+            return result
         except Exception as e:
             logger.error(f"Conflict check failed: {e}")
             return {"has_conflict": False}

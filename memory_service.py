@@ -75,15 +75,19 @@ class MemoryService:
         try:
             # 衝突偵測：跨分類搜尋全部記憶
             if self.llm:
+                logger.info(f"🔍 開始衝突偵測: {fact}")
                 conflict_result = self._check_and_resolve_conflict(
                     fact, category
                 )
+                logger.info(f"🔍 衝突偵測結果: {conflict_result}")
                 if conflict_result == "duplicate":
                     logger.info(f"⏭️ 跳過重複記憶: {fact}")
                     return "duplicate"
                 elif conflict_result == "updated":
                     logger.info(f"🔄 已更新既有記憶: {fact}")
                     return "updated"
+            else:
+                logger.warning("⚠️ LLM 未設定，跳過衝突偵測")
 
             # 新增記憶
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -114,28 +118,34 @@ class MemoryService:
             "updated" - 已更新舊記錄
         """
         try:
-            # 取得全部記憶（跨分類比對，避免舊資料漏掉）
+            # 取得全部記憶（跨分類比對）
             all_rows = self._get_all_rows()
+            logger.info(f"📊 現有記憶共 {len(all_rows)} 筆")
             if not all_rows:
                 return "new"
 
             existing_facts = [row["fact"] for row in all_rows]
+            logger.info(f"📋 既有記憶: {existing_facts}")
 
             # 用 LLM 判斷衝突
             conflict = self.llm.check_memory_conflict(new_fact, existing_facts)
+            logger.info(f"🤖 LLM 衝突判斷回傳: {conflict}")
 
-            if not conflict.get("has_conflict", False):
+            has_conflict = conflict.get("has_conflict", False)
+            if not has_conflict:
+                logger.info("✅ 無衝突，直接新增")
                 return "new"
 
+            # 有衝突 → 判斷是重複還是更新
+            is_duplicate = conflict.get("is_duplicate", False)
+            conflict_idx = conflict.get("conflict_index")
             reason = conflict.get("reason", "")
-            logger.info(f"🔍 衝突偵測結果: {reason}")
 
-            # 如果是重複
-            if "重複" in reason or "相同" in reason:
+            if is_duplicate:
+                logger.info(f"⏭️ 判定為重複: {reason}")
                 return "duplicate"
 
-            # 如果是更新（衝突），覆蓋舊記錄
-            conflict_idx = conflict.get("conflict_index")
+            # 嘗試更新舊記錄
             if conflict_idx is not None and 0 <= conflict_idx < len(all_rows):
                 old_row = all_rows[conflict_idx]
                 row_number = old_row["row_number"]
@@ -153,15 +163,15 @@ class MemoryService:
                 ).execute()
 
                 logger.info(
-                    f"🔄 記憶衝突解決：'{old_row['fact']}' → '{new_fact}'"
+                    f"🔄 記憶衝突解決：'{old_row['fact']}' → '{new_fact}' (row {row_number})"
                 )
                 return "updated"
-
-            return "new"
-
+            else:
+                logger.warning(f"⚠️ conflict_index 無效: {conflict_idx}，判定為重複跳過")
+                return "duplicate"
 
         except Exception as e:
-            logger.warning(f"⚠️ 衝突偵測失敗，直接新增: {e}")
+            logger.error(f"⚠️ 衝突偵測失敗，直接新增: {e}", exc_info=True)
             return "new"
 
     # ===== 讀取記憶 =====
