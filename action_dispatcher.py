@@ -223,7 +223,14 @@ class ActionDispatcher:
             return "仁哥抱歉，Google 服務授權不完整，Alice 暫時無法處理主動任務 🙇‍♀️"
         
         try:
-            events = get_todays_events(self.calendar)
+            # 檢查未來 2 天 (今天 + 明天) 的行程
+            from calendar_service import get_events
+            tz = pytz.timezone('Asia/Taipei')
+            now = datetime.datetime.now(tz)
+            start_utc = now.replace(hour=0, minute=0, second=0).astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
+            end_utc = (now + datetime.timedelta(days=1)).replace(hour=23, minute=59, second=59).astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
+            
+            events = get_events(self.calendar, start_utc, end_utc)
             emails = get_recent_emails(self.gmail)
             
             # 使用 LLM 分析

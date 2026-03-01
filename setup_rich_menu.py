@@ -42,29 +42,29 @@ def create_and_link_rich_menu(user_id, image_path="rich_menu_v2_FINAL_CLOSEUP.jp
             # Row 0
             {
                 "bounds": {"x": 0, "y": 0, "width": 833, "height": 562},
-                "action": {"type": "message", "text": "📂 今日簡報"}
+                "action": {"type": "message", "text": "【Alice，檢查未來2天行事曆與最新 15 封郵件，提供專業性建議。"}
             },
             {
                 "bounds": {"x": 833, "y": 0, "width": 834, "height": 562},
-                "action": {"type": "message", "text": "📸 視覺助理"}
+                "action": {"type": "message", "text": "📸 Alice，我有些照片需要妳幫忙視覺分析處理"}
             },
             # Row 1
             {
                 "bounds": {"x": 0, "y": 562, "width": 833, "height": 562},
-                "action": {"type": "message", "text": "🗓️ 行程管理"}
+                "action": {"type": "message", "text": "📅 Alice，幫我看看最近的行程安排"}
             },
             {
                 "bounds": {"x": 833, "y": 562, "width": 834, "height": 562},
-                "action": {"type": "message", "text": "✉️ 智慧回信"}
+                "action": {"type": "message", "text": "✉️ Alice，檢查最新重要郵件並建議擬稿"}
             },
             # Row 2
             {
                 "bounds": {"x": 0, "y": 1124, "width": 833, "height": 562},
-                "action": {"type": "message", "text": "✅ 待辦清單"}
+                "action": {"type": "message", "text": "✅ Alice，請整理我目前的待辦事項"}
             },
             {
                 "bounds": {"x": 833, "y": 1124, "width": 834, "height": 562},
-                "action": {"type": "message", "text": "🧠 記憶核心"}
+                "action": {"type": "message", "text": "🧠 Alice，關於我的偏好妳記住了什麼？"}
             },
             # Decorative / Secretary Area (Right Column)
             {
