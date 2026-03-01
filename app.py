@@ -236,8 +236,7 @@ def register_line_handlers(line_svc):
 
         # 常規意圖分析與分派
         analysis_result = S.intent_router.classify_intent(user_message)
-        intent = analysis_result.get("intent", "Chat")
-        S.dispatcher.dispatch(intent, user_message, user_id, reply_token=event.reply_token)
+        S.dispatcher.dispatch(analysis_result, user_message, user_id, reply_token=event.reply_token)
 
 
 # ===== 啟動入口 =====
