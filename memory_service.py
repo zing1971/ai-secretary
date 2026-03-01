@@ -3,6 +3,10 @@
 
 Google Sheets 欄位結構：
 A: 時間戳 | B: 分類 | C: 事實 | D: 關鍵實體（逗號分隔）
+
+Pinecone 整合：
+- 儲存時雙寫（Sheets 備份 + Pinecone 向量索引）
+- 檢索時優先使用 Pinecone 語意搜尋
 """
 import datetime
 import logging
@@ -12,15 +16,20 @@ logger = logging.getLogger(__name__)
 
 
 class MemoryService:
-    def __init__(self, sheets_service, llm_service=None):
+    def __init__(self, sheets_service, llm_service=None, pinecone_memory=None):
         self.service = sheets_service
         self.llm = llm_service
+        self.pinecone = pinecone_memory
         self.spreadsheet_id = Config.GOOGLE_SHEET_ID
         self.range_name = None
 
     def set_llm(self, llm_service):
         """延遲設定 LLM 服務（避免循環依賴）"""
         self.llm = llm_service
+
+    def set_pinecone(self, pinecone_memory):
+        """延遲設定 Pinecone 服務"""
+        self.pinecone = pinecone_memory
 
     def _ensure_range_name(self):
         """動態取得第一張工作表的名稱"""
@@ -73,11 +82,11 @@ class MemoryService:
             return "error"
 
         try:
-            # 衝突偵測：跨分類搜尋全部記憶
+            # 衝突偵測：優先用 Pinecone 語意搜尋找相似記憶
             if self.llm:
                 logger.info(f"🔍 開始衝突偵測: {fact}")
                 conflict_result = self._check_and_resolve_conflict(
-                    fact, category
+                    fact, category, entities
                 )
                 logger.info(f"🔍 衝突偵測結果: {conflict_result}")
                 if conflict_result == "duplicate":
@@ -91,15 +100,27 @@ class MemoryService:
 
             # 新增記憶
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            memory_id = f"mem_{timestamp.replace(' ', '_').replace(':', '')}"
+
+            # 1) 寫入 Google Sheets（備份）
             values = [[timestamp, category, fact, entities_str]]
             body = {'values': values}
-
             self.service.spreadsheets().values().append(
                 spreadsheetId=self.spreadsheet_id,
                 range=f"{self.range_name}!A:D",
                 valueInputOption='RAW',
                 body=body
             ).execute()
+
+            # 2) 寫入 Pinecone（向量索引）
+            if self.pinecone and self.pinecone.enabled:
+                self.pinecone.upsert_memory(
+                    memory_id=memory_id,
+                    fact=fact,
+                    category=category,
+                    entities=entities,
+                    timestamp=timestamp
+                )
 
             logger.info(f"✅ 存入記憶 [{category}]: {fact}")
             return "new"
@@ -108,9 +129,11 @@ class MemoryService:
             logger.error(f"❌ 存入記憶失敗: {str(e)}")
             return "error"
 
-    def _check_and_resolve_conflict(self, new_fact: str, category: str):
+    def _check_and_resolve_conflict(self, new_fact: str, category: str,
+                                     entities: list = None):
         """
-        檢查並處理記憶衝突（搜尋全部記憶，不限分類）。
+        檢查並處理記憶衝突。
+        優先用 Pinecone 語意搜尋找相似記憶，退化用全量比對。
         
         Returns:
             "new" - 無衝突，需要新增
@@ -118,14 +141,28 @@ class MemoryService:
             "updated" - 已更新舊記錄
         """
         try:
-            # 取得全部記憶（跨分類比對）
-            all_rows = self._get_all_rows()
-            logger.info(f"📊 現有記憶共 {len(all_rows)} 筆")
-            if not all_rows:
+            # 策略：有 Pinecone → 語意搜尋 TOP 5 再給 LLM 判斷
+            #       無 Pinecone → 退化為全量 Sheets 比對
+            existing_facts = []
+            pinecone_hits = []
+
+            if self.pinecone and self.pinecone.enabled:
+                # Pinecone 語意搜尋（找最相似的 5 筆）
+                pinecone_hits = self.pinecone.search_memories(new_fact, top_k=5)
+                existing_facts = [h["fact"] for h in pinecone_hits if h["fact"]]
+                logger.info(f"🔍 Pinecone 找到 {len(existing_facts)} 筆相似記憶")
+            else:
+                # 退化：全量 Sheets 比對
+                all_rows = self._get_all_rows()
+                logger.info(f"📊 現有記憶共 {len(all_rows)} 筆")
+                if not all_rows:
+                    return "new"
+                existing_facts = [row["fact"] for row in all_rows]
+
+            if not existing_facts:
                 return "new"
 
-            existing_facts = [row["fact"] for row in all_rows]
-            logger.info(f"📋 既有記憶: {existing_facts}")
+            logger.info(f"📋 比對記憶: {existing_facts}")
 
             # 用 LLM 判斷衝突
             conflict = self.llm.check_memory_conflict(new_fact, existing_facts)
@@ -146,25 +183,61 @@ class MemoryService:
                 return "duplicate"
 
             # 嘗試更新舊記錄
-            if conflict_idx is not None and 0 <= conflict_idx < len(all_rows):
-                old_row = all_rows[conflict_idx]
-                row_number = old_row["row_number"]
+            if conflict_idx is not None and 0 <= conflict_idx < len(existing_facts):
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                entities_str = ", ".join(
-                    self.llm.extract_search_keywords(new_fact)
-                ) if self.llm else ""
+                entities_str = ", ".join(entities) if entities else ""
+                memory_id = f"mem_{timestamp.replace(' ', '_').replace(':', '')}"
 
-                # 覆蓋既有列（同時更新分類）
-                self.service.spreadsheets().values().update(
-                    spreadsheetId=self.spreadsheet_id,
-                    range=f"{self.range_name}!A{row_number}:D{row_number}",
-                    valueInputOption='RAW',
-                    body={'values': [[timestamp, category, new_fact, entities_str]]}
-                ).execute()
+                # 更新 Sheets
+                if self.pinecone and self.pinecone.enabled and pinecone_hits:
+                    # 用 Pinecone 模式：先找到舊記憶的 Sheets 列再更新
+                    old_fact = existing_facts[conflict_idx]
+                    all_rows = self._get_all_rows()
+                    matched_row = None
+                    for row in all_rows:
+                        if row["fact"] == old_fact:
+                            matched_row = row
+                            break
 
-                logger.info(
-                    f"🔄 記憶衝突解決：'{old_row['fact']}' → '{new_fact}' (row {row_number})"
-                )
+                    if matched_row:
+                        row_number = matched_row["row_number"]
+                        self.service.spreadsheets().values().update(
+                            spreadsheetId=self.spreadsheet_id,
+                            range=f"{self.range_name}!A{row_number}:D{row_number}",
+                            valueInputOption='RAW',
+                            body={'values': [[timestamp, category, new_fact, entities_str]]}
+                        ).execute()
+                        logger.info(
+                            f"🔄 Sheets 記憶更新：'{old_fact}' → '{new_fact}' (row {row_number})"
+                        )
+
+                    # 更新 Pinecone（刪除舊的 + 寫入新的）
+                    old_hit = pinecone_hits[conflict_idx]
+                    self.pinecone.delete_memory(old_hit["id"])
+                    self.pinecone.upsert_memory(
+                        memory_id=memory_id,
+                        fact=new_fact,
+                        category=category,
+                        entities=entities,
+                        timestamp=timestamp
+                    )
+                    logger.info(f"🔄 Pinecone 記憶更新完成")
+                else:
+                    # 退化：純 Sheets 更新
+                    all_rows = self._get_all_rows()
+                    if conflict_idx < len(all_rows):
+                        old_row = all_rows[conflict_idx]
+                        row_number = old_row["row_number"]
+                        self.service.spreadsheets().values().update(
+                            spreadsheetId=self.spreadsheet_id,
+                            range=f"{self.range_name}!A{row_number}:D{row_number}",
+                            valueInputOption='RAW',
+                            body={'values': [[timestamp, category, new_fact, entities_str]]}
+                        ).execute()
+                        logger.info(
+                            f"🔄 記憶衝突解決：'{old_row['fact']}' → '{new_fact}' (row {row_number})"
+                        )
+
                 return "updated"
             else:
                 logger.warning(f"⚠️ conflict_index 無效: {conflict_idx}，判定為重複跳過")
@@ -244,8 +317,57 @@ class MemoryService:
     def fetch_relevant_memories(self, query: str) -> str:
         """
         智慧檢索：根據問題返回最相關的記憶。
-        結合關鍵字匹配 + 全量分類摘要。
+        優先使用 Pinecone 語意搜尋，退化為關鍵字匹配。
         """
+        # 優先使用 Pinecone 語意搜尋
+        if self.pinecone and self.pinecone.enabled:
+            return self._fetch_via_pinecone(query)
+
+        # 退化：原本的關鍵字匹配
+        return self._fetch_via_keywords(query)
+
+    def _fetch_via_pinecone(self, query: str) -> str:
+        """
+        Pinecone 語意搜尋：找出最相關的 TOP 5 記憶。
+        同時附帶 Sheets 的分類摘要作為補充。
+        """
+        try:
+            hits = self.pinecone.search_memories(query, top_k=5)
+
+            if not hits:
+                # Pinecone 沒結果，退化到 Sheets
+                logger.info("🔄 Pinecone 無結果，退化至 Sheets 全量搜尋")
+                return self._fetch_via_keywords(query)
+
+            result = ["【🎯 語意搜尋最相關的記憶】"]
+            for h in hits:
+                score_pct = f"{h['score']:.0%}" if h.get('score') else ""
+                result.append(
+                    f"  - [{h['category']}] {h['fact']} ({score_pct})"
+                )
+
+            # 附帶其他分類的摘要
+            if self._ensure_range_name():
+                all_rows = self._get_all_rows()
+                hit_facts = {h['fact'] for h in hits}
+                other = [r for r in all_rows if r['fact'] not in hit_facts]
+                if other:
+                    cat_summary = {}
+                    for r in other:
+                        cat = r["category"]
+                        cat_summary[cat] = cat_summary.get(cat, 0) + 1
+                    result.append("\n【📁 其他記憶摘要】")
+                    for cat, count in cat_summary.items():
+                        result.append(f"  - {cat}: {count} 筆")
+
+            return "\n".join(result)
+
+        except Exception as e:
+            logger.error(f"❌ Pinecone 檢索失敗，退化至關鍵字: {e}")
+            return self._fetch_via_keywords(query)
+
+    def _fetch_via_keywords(self, query: str) -> str:
+        """關鍵字匹配（退化模式）"""
         if not self._ensure_range_name():
             return "無法取得長期記憶。"
 
@@ -276,21 +398,18 @@ class MemoryService:
             else:
                 other.append(row)
 
-        # 組合結果：相關記憶 + 分類摘要
+        # 組合結果
         result = []
-
         if relevant:
             result.append("【🎯 與問題最相關的記憶】")
             for r in relevant:
                 result.append(f"  - [{r['category']}] {r['fact']}")
 
-        # 提供其他分類的摘要（不佔太多 token）
         if other:
             cat_summary = {}
             for r in other:
                 cat = r["category"]
                 cat_summary[cat] = cat_summary.get(cat, 0) + 1
-
             result.append("\n【📁 其他記憶摘要】")
             for cat, count in cat_summary.items():
                 result.append(f"  - {cat}: {count} 筆")

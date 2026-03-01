@@ -5,6 +5,7 @@ from llm_service import LLMService
 from config import logger
 from line_service import LineService
 from memory_service import MemoryService
+from pinecone_memory import PineconeMemory
 
 class ActionDispatcher:
     """處理各類意圖對應的業務邏輯。"""
@@ -16,7 +17,10 @@ class ActionDispatcher:
         self.calendar = calendar
         self.tasks = tasks
         self.sheets = sheets
-        self.memory = MemoryService(sheets, llm_service)
+
+        # 初始化 Pinecone 向量記憶服務
+        pinecone_mem = PineconeMemory()
+        self.memory = MemoryService(sheets, llm_service, pinecone_mem)
 
     def dispatch(self, intent: str, user_msg: str, user_id: str, reply_token: str = None):
         """根據意圖分流行動"""

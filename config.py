@@ -47,6 +47,7 @@ class Config:
     LINE_USER_ID = _get_env("LINE_USER_ID", "")
     GEMINI_API_KEY = _clean_api_key(_get_env("GEMINI_API_KEY", ""))
     GOOGLE_SHEET_ID = _get_env("GOOGLE_SHEET_ID", "")
+    PINECONE_API_KEY = _get_env("PINECONE_API_KEY", "")
 
     PORT = int(os.getenv("PORT", "8080"))
     DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
@@ -69,6 +70,10 @@ class Config:
         if missing:
             logger.error(f"❌ 缺少環境變數: {', '.join(missing)}")
             return False
+
+        if not cls.PINECONE_API_KEY:
+            logger.warning("⚠️ 未設定 PINECONE_API_KEY，Pinecone 向量記憶功能將停用")
+
         logger.info("✅ 環境變數驗證通過。")
         return True
 
