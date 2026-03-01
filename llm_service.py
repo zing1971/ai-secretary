@@ -76,36 +76,116 @@ class LLMService:
             logger.error(f"Gemini chat response generation failed: {e}")
             return "仁哥抱歉，Alice 目前無法回應您的訊息，請稍後再試 🙇‍♀️"
 
-    def extract_fact_to_remember(self, user_msg: str) -> str:
-        """從使用者要求記住的訊息中，萃取出核心事實"""
-        prompt = f"""你是 Alice，仁哥的私人秘書。從仁哥的訊息中萃取出一個精確、簡潔的事實。
+    def extract_fact_to_remember(self, user_msg: str) -> dict:
+        """從使用者要求記住的訊息中，萃取結構化事實"""
+        prompt = f"""你是 Alice，仁哥的私人秘書。從仁哥的訊息中萃取出結構化的事實資料。
 
 【萃取規則】
 1. 以「仁哥」為第三人稱主詞
-2. 只回傳一行純文字事實
-3. 去除所有命令語氣詞（記住、別忘了、幫我記、筆記一下）
-4. 日期統一用 MM/DD 格式，年份保留原樣
-5. 如果訊息中包含多個事實，只萃取最重要的那一個
+2. 去除所有命令語氣詞（記住、別忘了、幫我記、筆記一下）
+3. 日期統一用 MM/DD 格式，年份保留原樣
+4. 如果訊息中包含多個事實，只萃取最重要的那一個
+
+【分類清單】（只能選以下其一）
+- 人物關係：家人、朋友、同事等人際關係
+- 偏好：飲食、興趣、習慣等個人喜好
+- 健康：過敏、疾病、體質等健康資訊
+- 工作：職務、公司、專案、截止日等工作相關
+- 個人資產：車牌、住址、帳號等個人資訊
+- 重要日期：生日、紀念日、固定行程等
+- 其他：無法歸類的雜項
 
 【範例】
-- 「記住我老婆叫小美」→ 仁哥的老婆叫小美
-- 「別忘了下週三要交報告」→ 仁哥下週三需要交報告
-- 「我對蝦子過敏，記一下」→ 仁哥對蝦子過敏
-- 「備忘：車牌 ABC-1234」→ 仁哥的車牌是 ABC-1234
-- 「我兒子今年讀國中二年級」→ 仁哥的兒子目前就讀國中二年級
-- 「記住我習慣喝美式咖啡不加糖」→ 仁哥習慣喝美式咖啡不加糖
+輸入：「記住我老婆叫小美」
+輸出：{{"fact": "仁哥的老婆叫小美", "category": "人物關係", "entities": ["老婆", "小美"]}}
+
+輸入：「我對蝦子過敏」
+輸出：{{"fact": "仁哥對蝦子過敏", "category": "健康", "entities": ["蝦子", "過敏"]}}
+
+輸入：「記住我老婆生日是 5/20」
+輸出：{{"fact": "仁哥的老婆生日是 05/20", "category": "重要日期", "entities": ["老婆", "生日", "05/20"]}}
+
+輸入：「我習慣喝美式咖啡不加糖」
+輸出：{{"fact": "仁哥習慣喝美式咖啡不加糖", "category": "偏好", "entities": ["美式咖啡", "不加糖"]}}
+
+輸入：「備忘：車牌 ABC-1234」
+輸出：{{"fact": "仁哥的車牌是 ABC-1234", "category": "個人資產", "entities": ["車牌", "ABC-1234"]}}
 
 仁哥說：{user_msg}
 """
         try:
             response = self.client.models.generate_content(
                 model=self.model_id,
-                contents=prompt
+                contents=prompt,
+                config={'response_mime_type': 'application/json'}
             )
-            return response.text.strip()
+            result = json.loads(response.text)
+            # 確保回傳結構完整
+            return {
+                "fact": result.get("fact", ""),
+                "category": result.get("category", "其他"),
+                "entities": result.get("entities", [])
+            }
         except Exception as e:
-            logger.error(f"Gemini fact extraction failed: {e}")
-            return ""
+            logger.error(f"Gemini structured fact extraction failed: {e}")
+            return None
+
+    def check_memory_conflict(self, new_fact: str, existing_facts: list) -> dict:
+        """檢查新事實是否與既有記憶衝突"""
+        if not existing_facts:
+            return {"has_conflict": False}
+
+        existing_text = "\n".join([f"- {f}" for f in existing_facts])
+        prompt = f"""你是 Alice，仁哥的私人秘書。請判斷以下「新事實」是否與「既有記憶」中的任何一條矛盾或重複。
+
+【新事實】
+{new_fact}
+
+【既有記憶（同分類）】
+{existing_text}
+
+【判斷規則】
+- 如果新事實更新了舊事實（例如「喜歡拿鐵」取代「喜歡黑咖啡」）→ 衝突，需要更新
+- 如果新事實是舊事實的補充（不矛盾）→ 不衝突
+- 如果新事實與舊事實幾乎相同 → 重複
+
+請輸出 JSON：
+{{"has_conflict": true/false, "conflict_index": 被衝突的記憶編號(0起算)或null, "reason": "簡短說明"}}
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=prompt,
+                config={'response_mime_type': 'application/json'}
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            logger.error(f"Conflict check failed: {e}")
+            return {"has_conflict": False}
+
+    def extract_search_keywords(self, query: str) -> list:
+        """從使用者問題中萃取搜尋關鍵字"""
+        prompt = f"""從以下問題中萃取 1-3 個核心關鍵字，用於搜尋記憶庫。
+只回傳 JSON 陣列格式。
+
+問題：{query}
+
+範例：
+「我老婆生日幾號？」→ ["老婆", "生日"]
+「我喜歡喝什麼咖啡？」→ ["咖啡", "喜歡"]
+「我對什麼過敏？」→ ["過敏"]
+「我兒子讀哪間學校？」→ ["兒子", "學校"]
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=prompt,
+                config={'response_mime_type': 'application/json'}
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            logger.error(f"Keyword extraction failed: {e}")
+            return []
 
     def analyze_for_actions(self, events, emails):
         """分析行程與信件，萃取 JSON 格式的待辦事項與草稿建議。"""

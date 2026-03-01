@@ -16,7 +16,7 @@ class ActionDispatcher:
         self.calendar = calendar
         self.tasks = tasks
         self.sheets = sheets
-        self.memory = MemoryService(sheets)
+        self.memory = MemoryService(sheets, llm_service)
 
     def dispatch(self, intent: str, user_msg: str, user_id: str, reply_token: str = None):
         """根據意圖分流行動"""
@@ -24,17 +24,19 @@ class ActionDispatcher:
         
         try:
             if intent == "Chat":
-                # 獲取長期記憶並進行個人化對話
-                memories = self.memory.fetch_all_memories()
+                # 智慧檢索相關記憶，進行個人化對話
+                memories = self.memory.fetch_relevant_memories(user_msg)
                 response = self.llm.generate_chat_response(user_msg, memories)
                 self._send_response(user_id, reply_token, response)
                 
             elif intent == "Memory_Update":
-                # 萃取事實並存入 Google Sheets
-                fact = self.llm.extract_fact_to_remember(user_msg)
-                if fact:
-                    if self.memory.save_memory(fact):
-                        self._send_response(user_id, reply_token, f"✅ 收到，Alice 已經幫仁哥記下了：{fact}")
+                # 萃取結構化事實並存入 Google Sheets
+                fact_data = self.llm.extract_fact_to_remember(user_msg)
+                if fact_data and fact_data.get("fact"):
+                    if self.memory.save_memory(fact_data):
+                        cat_label = fact_data.get('category', '')
+                        fact_text = fact_data.get('fact', '')
+                        self._send_response(user_id, reply_token, f"✅ 收到，Alice 已經幫仁哥記下了：\n📁 分類：{cat_label}\n📝 {fact_text}")
                     else:
                         self._send_response(user_id, reply_token, "仁哥抱歉，Alice 在存入記憶時遇到了問題，請稍後再試一次 🙇‍♀️")
                 else:
