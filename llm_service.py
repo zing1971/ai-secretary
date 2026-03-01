@@ -76,6 +76,51 @@ class LLMService:
             logger.error(f"Gemini chat response generation failed: {e}")
             return "仁哥抱歉，Alice 目前無法回應您的訊息，請稍後再試 🙇‍♀️"
 
+    def format_calendar_response(self, events: list, time_label: str, user_msg: str, memories: str = "") -> str:
+        """根據行事曆行程與秘書觀點，用 Alice 口吻生成格式化回覆"""
+        current_time = _get_current_time_str()
+        
+        events_str = "\n".join(events) if events else "無已排定行程"
+        
+        system_instruction = f"""{ALICE_PERSONA}
+
+【當前時間】{current_time}
+
+你的任務是根據仁哥查詢的行事曆結果（{time_label}），以專業行政秘書的角度回報，並提供貼心建議。
+
+【仁哥的長期記憶與偏好】
+---
+{memories}
+---
+
+【查詢時段】{time_label}
+【行程清單】
+{events_str}
+
+【回覆結構要求】
+1. 開頭問候：簡短報告查詢結果（例如：「仁哥，為您整理{time_label}的行程：」）
+2. 行程清單：如果沒有行程，簡單帶過；如果有，清晰列出。
+3. 💡 秘書貼心建議（這是重點）：
+   - 審視行程密集度：若行程過度密集 (Back-to-back)，提醒保留喘息時間、喝杯水或適當安排用餐。
+   - 行程前準備：若有重要會議，提醒是否需要準備資料、前置作業或提早出發。
+   - 連結記憶：若會議參與者、標題或地點與上方「長期記憶」有關，巧妙帶入貼心提醒。
+   - 關懷鼓勵：若行程空檔多，可提醒處理待辦；若完全沒有行程，給予溫暖的問候（如：終於可以好好放鬆休息了）。
+4. 格式：使用清晰的列表，將「行程清單」與「💡 秘書貼心建議」分開段落顯示，適度使用 emoji。
+
+請直接輸出傳送給仁哥的 LINE 訊息，不須有多餘解讀或開場白。
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=f"請幫我分析行程並給出建議，仁哥問：「{user_msg}」",
+                config={'system_instruction': system_instruction}
+            )
+            return response.text
+        except Exception as e:
+            logger.error(f"Gemini calendar formatting failed: {e}")
+            msg = "\n".join(events) if events else f"仁哥，{time_label}沒有排定行程，可以好好休息一下 😊"
+            return f"📅 仁哥，以下是{time_label}行程：\n{msg}"
+
     def extract_fact_to_remember(self, user_msg: str) -> dict:
         """從使用者要求記住的訊息中，萃取結構化事實"""
         prompt = f"""你是 Alice，仁哥的私人秘書。從仁哥的訊息中萃取出結構化的事實資料。

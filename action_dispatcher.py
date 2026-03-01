@@ -1,4 +1,6 @@
-from calendar_service import get_todays_events
+import datetime
+import pytz
+from calendar_service import get_todays_events, get_events
 from gmail_service import get_recent_emails, create_gmail_draft
 from tasks_service import create_google_task
 from llm_service import LLMService
@@ -38,9 +40,16 @@ class ActionDispatcher:
     CONFIRM_KEYWORDS = {"好", "好的", "可以", "執行", "同意", "沒問題", "ok", "OK", "去做吧", "做吧", "對", "是", "嗯"}
     CANCEL_KEYWORDS = {"不要", "不用", "取消", "算了", "停", "不", "別", "放棄"}
 
-    def dispatch(self, intent: str, user_msg: str, user_id: str, reply_token: str = None):
+    def dispatch(self, intent_data, user_msg: str, user_id: str, reply_token: str = None):
         """根據意圖分流行動"""
-        logger.info(f"分派意圖: {intent}")
+        if isinstance(intent_data, str):
+            intent = intent_data
+            time_range = {"start_offset": 0, "end_offset": 0, "label": "今天"}
+        else:
+            intent = intent_data.get("intent", "Chat")
+            time_range = intent_data.get("time_range", {"start_offset": 0, "end_offset": 0, "label": "今天"})
+            
+        logger.info(f"分派意圖: {intent} | 時間標籤: {time_range.get('label')}")
 
         # 🔑 規則式前置判斷：有待確認提案時，短回覆直接攔截
         if self.drive_organizer and self.drive_organizer.has_pending_proposal(user_id):
@@ -117,9 +126,33 @@ class ActionDispatcher:
                 self._send_response(user_id, reply_token, result)
                 
             elif intent == "Query_Calendar":
-                events = get_todays_events(self.calendar)
-                msg = "\n".join(events) if events else "仁哥，今天沒有排定行程，可以好好休息一下 😊"
-                self._send_response(user_id, reply_token, f"📅 仁哥，以下是今日行程：\n{msg}")
+                tz = pytz.timezone('Asia/Taipei')
+                now = datetime.datetime.now(tz)
+                
+                # 計算開始與結束時間
+                start_offset = time_range.get("start_offset", 0)
+                end_offset = time_range.get("end_offset", 0)
+                label = time_range.get("label", "指定時間")
+                
+                start_dt = now + datetime.timedelta(days=start_offset)
+                end_dt = now + datetime.timedelta(days=end_offset)
+                
+                # 把開始設為那天的 00:00:00，結束設為那天的 23:59:59 (依台北時區)
+                start_str = start_dt.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+                end_str = end_dt.replace(hour=23, minute=59, second=59, microsecond=0).isoformat()
+                
+                # 將時區轉換為 UTC 以符合 Google Calendar API 需求
+                start_utc = datetime.datetime.fromisoformat(start_str).astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
+                end_utc = datetime.datetime.fromisoformat(end_str).astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
+                
+                events = get_events(self.calendar, start_utc, end_utc)
+                
+                # 從記憶中提取可能相關的資訊，讓秘書分析更貼心
+                memories = self.memory.fetch_relevant_memories(user_msg)
+                
+                # 請 LLM 格式化回覆 (加入秘書視角)
+                final_response = self.llm.format_calendar_response(events, label, user_msg, memories)
+                self._send_response(user_id, reply_token, final_response)
                 
             elif intent == "Query_Email":
                 emails = get_recent_emails(self.gmail)
