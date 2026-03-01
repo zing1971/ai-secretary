@@ -133,6 +133,7 @@ class ActionDispatcher:
                 start_offset = time_range.get("start_offset", 0)
                 end_offset = time_range.get("end_offset", 0)
                 label = time_range.get("label", "指定時間")
+                search_keyword = intent_data.get("search_keyword", "")
                 
                 start_dt = now + datetime.timedelta(days=start_offset)
                 end_dt = now + datetime.timedelta(days=end_offset)
@@ -145,13 +146,13 @@ class ActionDispatcher:
                 start_utc = datetime.datetime.fromisoformat(start_str).astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
                 end_utc = datetime.datetime.fromisoformat(end_str).astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
                 
-                events = get_events(self.calendar, start_utc, end_utc)
+                events = get_events(self.calendar, start_utc, end_utc, query=search_keyword)
                 
                 # 從記憶中提取可能相關的資訊，讓秘書分析更貼心
                 memories = self.memory.fetch_relevant_memories(user_msg)
                 
                 # 請 LLM 格式化回覆 (加入秘書視角)
-                final_response = self.llm.format_calendar_response(events, label, user_msg, memories)
+                final_response = self.llm.format_calendar_response(events, label, user_msg, memories, search_keyword)
                 self._send_response(user_id, reply_token, final_response)
                 
             elif intent == "Query_Email":

@@ -39,9 +39,10 @@ class IntentRouter:
 ⚠️ 嚴格規則：
 - 只能輸出 JSON 格式。
 - 若 intent 不是 "Query_Calendar"，輸出格式為 {{"intent": "分類名稱"}}
-- 若 intent 是 "Query_Calendar"，必須根據現在時間，額外輸出 "time_range" 欄位（務必準確計算距離今天的天數差）：
+- 若 intent 是 "Query_Calendar"，必須根據現在時間，額外輸出 "time_range" 欄位（務必準確計算距離今天的天數差），如有明確提到要查詢的行程關鍵字（例如：下次"專案會議", "理專"的回報時間），請輸出 "search_keyword" 欄位：
   {{
     "intent": "Query_Calendar",
+    "search_keyword": "專案", // 可選欄位，若使用者有提到特定行程/會議的關鍵字，萃取出關鍵字字串。若無則回傳空字串 ""。
     "time_range": {{
       "start_offset": 0, // 距離今天的起始天數差 (整數，0=今天, 1=明天, 2=後天)
       "end_offset": 0,   // 距離今天的結束天數差 (整數)
@@ -73,12 +74,13 @@ class IntentRouter:
    ❌ 不含「信件/行程」等其他事務整理
 
 5. "Query_Calendar" — 查詢行程、會議、排程
-   ✅ 「今天有什麼會」「明天有約嗎」「下週三的行程」「這禮拜的排程」
-   🔑 Offset 計算指引：
-   - 請直接查閱上方的【現在時間與日期對照表】，找出對應目標日期的 offset 填入。
+   ✅ 「今天有什麼會」「明天有約嗎」「下週三的行程」「下次業務電子化會議的日期」
+   🔑 Offset 與 Search_Keyword 計算指引：
+   - 如果問「下週三」，請在表中尋找下一個星期的星期三。
    - 華人習慣以「週一」為每週第一天。若今天是「週日」，則「下週」是從「明天(週一)」開始。若問「下週三」，就是離今天差3天的星期三，而非差10天的星期三。
    - 區間查詢：例如「未來三天」，則 start_offset=0, end_offset=2。
-   - 未指明時間 -> 預設 start_offset: 0, end_offset: 0, label: "今天"
+   - 關鍵字查詢「下次OＯ會議」：若使用者詢問「下次」但沒有明確時間，請將 `search_keyword` 設為 "OO會議"（不含下次），並放寬時間範圍（例如 start_offset=0, end_offset=90）以確保能搜尋到未來的事件，label 設為「下次」。
+   - 未指明時間且無關鍵字 -> 預設 start_offset: 0, end_offset: 0, label: "今天"
 
 6. "Query_Email" — 查詢信件、郵件
    ✅ 「有新信嗎」「最近誰寄信給我」「看一下信箱」

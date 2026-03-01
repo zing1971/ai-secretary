@@ -76,11 +76,12 @@ class LLMService:
             logger.error(f"Gemini chat response generation failed: {e}")
             return "仁哥抱歉，Alice 目前無法回應您的訊息，請稍後再試 🙇‍♀️"
 
-    def format_calendar_response(self, events: list, time_label: str, user_msg: str, memories: str = "") -> str:
+    def format_calendar_response(self, events: list, time_label: str, user_msg: str, memories: str = "", search_keyword: str = "") -> str:
         """根據行事曆行程與秘書觀點，用 Alice 口吻生成格式化回覆"""
         current_time = _get_current_time_str()
         
         events_str = "\n".join(events) if events else "無已排定行程"
+        keyword_context = f"【指定搜尋關鍵字】{search_keyword}\n（注意：這是針對特定關鍵字的查詢結果，回答語氣請直接針對此事件）" if search_keyword else ""
         
         system_instruction = f"""{ALICE_PERSONA}
 
@@ -94,12 +95,13 @@ class LLMService:
 ---
 
 【查詢時段】{time_label}
+{keyword_context}
 【行程清單】
 {events_str}
 
 【回覆結構要求】
-1. 開頭問候：簡短報告查詢結果（例如：「仁哥，為您整理{time_label}的行程：」）
-2. 行程清單：如果沒有行程，簡單帶過；如果有，清晰列出。
+1. 開頭問候：簡短報告查詢結果（例如：「仁哥，為您整理{time_label}的行程：」）。若是條件搜尋，請用：「關於您詢問的主題，我找到了以下安排：」
+2. 行程清單：如果沒有行程，簡單帶過；如果有，清晰列出。如果是針對特定會議（例如「下次業務會議」）且只有一兩筆，可以使用敘述句（例如：「下次業務會議安排在...」）代替條列。
 3. 💡 秘書貼心建議（這是重點）：
    - 審視行程密集度：若行程過度密集 (Back-to-back)，提醒保留喘息時間、喝杯水或適當安排用餐。
    - 行程前準備：若有重要會議，提醒是否需要準備資料、前置作業或提早出發。

@@ -15,15 +15,19 @@ def format_event_time(date_str: str) -> str:
     except Exception:
         return date_str
 
-def get_events(service, time_min: str, time_max: str):
-    """取得指定時間範圍內的行事曆行程 (時間需為 RFC3339 格式)"""
-    events_result = service.events().list(
-        calendarId='primary', 
-        timeMin=time_min,
-        timeMax=time_max,
-        singleEvents=True,
-        orderBy='startTime'
-    ).execute()
+def get_events(service, time_min: str, time_max: str, query: str = None):
+    """取得指定時間範圍內的行事曆行程 (時間需為 RFC3339 格式)，可選傳入 query 作為字串搜尋"""
+    kwargs = {
+        'calendarId': 'primary', 
+        'timeMin': time_min,
+        'timeMax': time_max,
+        'singleEvents': True,
+        'orderBy': 'startTime'
+    }
+    if query:
+        kwargs['q'] = query
+        
+    events_result = service.events().list(**kwargs).execute()
     events = events_result.get('items', [])
     
     processed_events = []
