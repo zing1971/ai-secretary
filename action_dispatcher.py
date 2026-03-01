@@ -34,10 +34,24 @@ class ActionDispatcher:
             self.drive_organizer = None
             logger.warning("⚠️ Drive 服務未就緒，整理功能停用")
 
+    # 確認/取消動作的關鍵字（規則式判斷，不依賴 LLM）
+    CONFIRM_KEYWORDS = {"好", "好的", "可以", "執行", "同意", "沒問題", "ok", "OK", "去做吧", "做吧", "對", "是", "嗯"}
+    CANCEL_KEYWORDS = {"不要", "不用", "取消", "算了", "停", "不", "別", "放棄"}
+
     def dispatch(self, intent: str, user_msg: str, user_id: str, reply_token: str = None):
         """根據意圖分流行動"""
         logger.info(f"分派意圖: {intent}")
-        
+
+        # 🔑 規則式前置判斷：有待確認提案時，短回覆直接攔截
+        if self.drive_organizer and self.drive_organizer.has_pending_proposal(user_id):
+            msg_clean = user_msg.strip()
+            if msg_clean in self.CONFIRM_KEYWORDS:
+                intent = "Confirm_Action"
+                logger.info(f"🔑 規則式攔截 → Confirm_Action (有待確認提案)")
+            elif msg_clean in self.CANCEL_KEYWORDS:
+                intent = "Cancel_Action"
+                logger.info(f"🔑 規則式攔截 → Cancel_Action (有待確認提案)")
+
         try:
             if intent == "Chat":
                 # 智慧檢索相關記憶，進行個人化對話
