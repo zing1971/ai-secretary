@@ -34,11 +34,11 @@ class ActionDispatcher:
                 fact = self.llm.extract_fact_to_remember(user_msg)
                 if fact:
                     if self.memory.save_memory(fact):
-                        self._send_response(user_id, reply_token, f"✅ 已為您記住：{fact}")
+                        self._send_response(user_id, reply_token, f"✅ 收到，Alice 已經幫仁哥記下了：{fact}")
                     else:
-                        self._send_response(user_id, reply_token, "❌ 抱歉老闆，存入記憶時發生錯誤，請稍後再試。")
+                        self._send_response(user_id, reply_token, "仁哥抱歉，Alice 在存入記憶時遇到了問題，請稍後再試一次 🙇‍♀️")
                 else:
-                    self._send_response(user_id, reply_token, "抱歉，我無法從您的訊息中萃取出要記住的事實。")
+                    self._send_response(user_id, reply_token, "仁哥，Alice 沒有從訊息中找到需要記住的內容，可以再說一次嗎？😊")
             
             elif intent == "Proactive_Process":
                 # 觸發主動處理流程
@@ -47,20 +47,20 @@ class ActionDispatcher:
                 
             elif intent == "Query_Calendar":
                 events = get_todays_events(self.calendar)
-                msg = "\n".join(events) if events else "今天沒有排定行程。"
-                self._send_response(user_id, reply_token, f"【今日行程】\n{msg}")
+                msg = "\n".join(events) if events else "仁哥，今天沒有排定行程，可以好好休息一下 😊"
+                self._send_response(user_id, reply_token, f"📅 仁哥，以下是今日行程：\n{msg}")
                 
             elif intent == "Query_Email":
                 emails = get_recent_emails(self.gmail)
                 if emails:
                     summaries = [e['summary_text'] for e in emails[:5]]
                     msg = "\n".join(summaries)
-                    self._send_response(user_id, reply_token, f"【最新信件】\n{msg}")
+                    self._send_response(user_id, reply_token, f"📧 仁哥，以下是最新的信件：\n{msg}")
                 else:
-                    self._send_response(user_id, reply_token, "沒有偵測到未讀信件。")
+                    self._send_response(user_id, reply_token, "仁哥，目前沒有未讀信件，信箱很乾淨喔 ✨")
         except Exception as e:
             logger.error(f"處理分派時異常: {e}")
-            self._send_response(user_id, reply_token, f"系統處理發生異常: {str(e)}")
+            self._send_response(user_id, reply_token, f"仁哥抱歉，Alice 處理時遇到了問題：{str(e)} 🙇‍♀️")
 
     def _send_response(self, user_id, reply_token, text):
         """核心回覆邏輯：優先使用 reply_token，失敗則使用 push_text"""
@@ -73,7 +73,7 @@ class ActionDispatcher:
     def handle_proactive_process(self):
         """執行主動處理邏輯並回傳報告字串"""
         if not all([self.gmail, self.calendar, self.tasks]):
-            return "抱歉老闆，Google 服務授權不全，無法處理主動任務。"
+            return "仁哥抱歉，Google 服務授權不完整，Alice 暫時無法處理主動任務 🙇‍♀️"
         
         try:
             events = get_todays_events(self.calendar)
@@ -95,8 +95,8 @@ class ActionDispatcher:
                 drafts_created += 1
                 
             briefing = action_data.get('briefing', '已為您處理完畢。')
-            return f"【秘書處理報告】\n{briefing}\n\n已成功建立 {tasks_created} 項任務與 {drafts_created} 封草稿。"
+            return f"📋 Alice 處理報告\n{briefing}\n\n已幫仁哥建立 {tasks_created} 項待辦任務、{drafts_created} 封回覆草稿 ✅"
             
         except Exception as e:
             logger.error(f"主動處理失敗: {e}")
-            return f"主動處理時發生錯誤：{str(e)}"
+            return f"仁哥抱歉，Alice 在處理時遇到了問題：{str(e)} 🙇‍♀️"

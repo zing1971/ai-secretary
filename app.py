@@ -87,9 +87,9 @@ app = FastAPI(title="AI Secretary", lifespan=lifespan)
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    status = "🟢 正常運行" if S.ready else "🟡 啟動中"
+    status = "🟢 Alice 在線服務中" if S.ready else "🟡 Alice 正在準備中..."
     return f"""<html><body style="font-family:Arial;text-align:center;padding:50px">
-    <h1>🤖 AI 秘書 ({status})</h1></body></html>"""
+    <h1>👩‍💼 AI 秘書 Alice ({status})</h1></body></html>"""
 
 
 @app.post("/callback")
@@ -134,7 +134,7 @@ async def trigger_briefing(request: Request):
         report = S.dispatcher.handle_proactive_process()
 
         # 組合並推送訊息
-        push_msg = f"🌅 【早安簡報】\n{report}"
+        push_msg = f"🌅 仁哥早安！以下是 Alice 為您準備的今日簡報：\n{report}"
         S.line_service.push_text(push_msg)
 
         logger.info("✅ 早安簡報推送成功！")
@@ -159,7 +159,7 @@ async def trigger_briefing_get():
 
     try:
         report = S.dispatcher.handle_proactive_process()
-        push_msg = f"🌅 【早安簡報】\n{report}"
+        push_msg = f"🌅 仁哥早安！以下是 Alice 為您準備的今日簡報：\n{report}"
         S.line_service.push_text(push_msg)
         return JSONResponse(content={"status": "ok", "message": "簡報已推送"})
     except Exception as e:
@@ -183,7 +183,7 @@ def register_line_handlers(line_svc):
         logger.info(f"收到訊息: {user_message} (from {user_id})")
 
         if not S.ready:
-            S.line_service.reply_text(event.reply_token, "秘書正在開機中，請稍後再試。")
+            S.line_service.reply_text(event.reply_token, "仁哥，Alice 正在開機中，請稍等一下喔 ☕")
             return
 
         if user_id != S.line_service.user_id:
@@ -193,10 +193,10 @@ def register_line_handlers(line_svc):
         if user_message == "測試排程":
             try:
                 report = S.dispatcher.handle_proactive_process()
-                push_msg = f"🌅 【早安簡報】\n{report}"
+                push_msg = f"🌅 仁哥早安！以下是 Alice 為您準備的簡報：\n{report}"
                 S.line_service.reply_text(event.reply_token, push_msg)
             except Exception as e:
-                S.line_service.reply_text(event.reply_token, f"簡報執行失敗: {e}")
+                S.line_service.reply_text(event.reply_token, f"仁哥抱歉，Alice 執行簡報時遇到問題：{e} 🙇‍♀️")
             return
 
         # 常規意圖分析與分派
