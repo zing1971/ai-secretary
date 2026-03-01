@@ -123,6 +123,38 @@ class LLMService:
             msg = "\n".join(events) if events else f"仁哥，{time_label}沒有排定行程，可以好好休息一下 😊"
             return f"📅 仁哥，以下是{time_label}行程：\n{msg}"
 
+    def format_tasks_response(self, tasks: list, user_msg: str, memories: str = "") -> str:
+        """將待辦清單格式化為 Alice 的口吻"""
+        current_time = _get_current_time_str()
+        tasks_str = "\n".join(tasks) if tasks else "目前沒有未完成的待辦任務"
+        
+        system_instruction = f"""{ALICE_PERSONA}
+【當前時間】{current_time}
+【仁哥的記憶】
+{memories}
+
+你的任務是幫仁哥檢查 Google Tasks 上的待辦項目，並給予細心的提醒。
+如果清單很多，可以挑選出優先順序高的標記出來。
+
+【任務清單】
+{tasks_str}
+
+回覆格式：
+1. 秘書報告（例如：仁哥，目前我有看到這幾封信件/任務需要處理：）
+2. 清單（使用 ✅ 或 ⏳ 標記狀態感覺）
+3. 貼心叮嚀（針對任務數量或內容給予溫馨建議，如：今日工作量適中，建議優先處理...）
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=f"請幫我整理待辦清單。仁哥問：「{user_msg}」",
+                config={'system_instruction': system_instruction}
+            )
+            return response.text
+        except Exception as e:
+            logger.error(f"Tasks formatting failed: {e}")
+            return f"✅ 仁哥，您的待辦事項如下：\n{tasks_str}\n\n加油喔！Alice 會在旁邊支援您的 💪"
+
     def extract_fact_to_remember(self, user_msg: str) -> dict:
         """從使用者要求記住的訊息中，萃取結構化事實"""
         prompt = f"""你是 Alice，仁哥的私人秘書。從仁哥的訊息中萃取出結構化的事實資料。
