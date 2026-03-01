@@ -23,6 +23,14 @@ class IntentRouter:
         weekday_map = ['一', '二', '三', '四', '五', '六', '日']
         current_time_str = now.strftime(f"%Y-%m-%d（星期{weekday_map[now.weekday()]}）%H:%M")
 
+        # 產生未來 14 天的日期 offset 對照表，大幅降低 LLM 計算錯誤率
+        date_table = []
+        for i in range(15):
+            d = now + datetime.timedelta(days=i)
+            wd = weekday_map[d.weekday()]
+            date_table.append(f"offset {i} = {d.strftime('%Y-%m-%d')} (星期{wd})")
+        date_mapping_str = "\n".join(date_table)
+
         system_instruction = f"""你是 Alice，一位 30 歲的專業女性 AI 行政秘書，忠誠、細心且服從性高。
 你服務的老闆叫「仁哥」。
 
@@ -42,7 +50,10 @@ class IntentRouter:
   }}
 - 禁止輸出任何多餘文字。
 
-【現在時間：{current_time_str}】（計算 offset 時請以此時間為絕對基準）
+【現在時間與日期對照表】
+現在時間：{current_time_str}
+請直接參考以下 offset 對照表來決定 start_offset 和 end_offset：
+{date_mapping_str}
 
 意圖分類（按優先判斷順序）：
 1. "Confirm_Action" — 確認/同意執行待處理的操作
@@ -64,8 +75,9 @@ class IntentRouter:
 5. "Query_Calendar" — 查詢行程、會議、排程
    ✅ 「今天有什麼會」「明天有約嗎」「下週三的行程」「這禮拜的排程」
    🔑 Offset 計算指引：
-   - 如果問「幾天後」或特定星期，請根據目前的【現在時間】精確算出與今天的差值。
-   - 例如：如果今天是星期一，問「下週三」，就是距離 9 天 (start_offset=9, end_offset=9)
+   - 請直接查閱上方的【現在時間與日期對照表】，找出對應目標日期的 offset 填入。
+   - 華人習慣以「週一」為每週第一天。若今天是「週日」，則「下週」是從「明天(週一)」開始。若問「下週三」，就是離今天差3天的星期三，而非差10天的星期三。
+   - 區間查詢：例如「未來三天」，則 start_offset=0, end_offset=2。
    - 未指明時間 -> 預設 start_offset: 0, end_offset: 0, label: "今天"
 
 6. "Query_Email" — 查詢信件、郵件
