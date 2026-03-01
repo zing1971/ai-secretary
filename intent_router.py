@@ -38,10 +38,11 @@ class IntentRouter:
 
 ⚠️ 嚴格規則：
 - 只能輸出 JSON 格式。
-- 若 intent 不是 "Query_Calendar"，輸出格式為 {{"intent": "分類名稱"}}
-- 若 intent 是 "Query_Calendar"，必須根據現在時間，額外輸出 "time_range" 欄位（務必準確計算距離今天的天數差），如有明確提到要查詢的行程關鍵字（例如：下次"專案會議", "理專"的回報時間），請輸出 "search_keyword" 欄位：
+- 若 intent 不是 "Query_Calendar" 或 "Query_Email"，輸出格式為 {{"intent": "分類名稱"}}
+- 若 intent 是 "Query_Calendar" 或 "Query_Email"，必須根據現在時間，額外輸出 "time_range" 欄位（務必準確計算距離今天的天數差）。
+  如有明確提到要查詢的行程/信件關鍵字（例如：下次"專案會議", 尋找"報價單", 誰寄的"合約"），請輸出 "search_keyword" 欄位：
   {{
-    "intent": "Query_Calendar",
+    "intent": "Query_Email",
     "search_keyword": "業務電子化", // 可選欄位，若使用者有提到特定行程/會議的關鍵字，請萃取出「最核心、最具鑑別度的實體名詞」，務必去除「會議、專案、開會、的」等輔助字眼。若無則回報空字串 ""。
     "time_range": {{
       "start_offset": 0, // 距離今天的起始天數差 (整數，0=今天, 1=明天, 2=後天)
@@ -82,9 +83,9 @@ class IntentRouter:
    - 關鍵字查詢「下次OＯ會議」：若使用者詢問「下次」但沒有明確時間，請將 `search_keyword` 設為最具代表性的核心名詞（不含「下次」跟「會議、專案、討論」等贅字，例如「業務電子化」），並放寬時間範圍（例如 start_offset=0, end_offset=90）以確保能搜尋到未來的事件，label 設為「下次」。
    - 未指明時間且無關鍵字 -> 預設 start_offset: 0, end_offset: 0, label: "今天"
 
-6. "Query_Email" — 查詢信件、郵件
-   ✅ 「有新信嗎」「最近誰寄信給我」「看一下信箱」
-
+6. "Query_Email" — 查詢信件、郵件，或要求對信件「草擬回覆」
+   ✅ 「有新信嗎」「最近誰寄信給我」「幫我找張總寄來的報價單信件」「幫我草擬回覆最新一篇會議記錄」「幫我回信給客戶說謝謝」
+   🔑 Offset 與 Search_Keyword 同 Query_Calendar 計算指引，若使用者要找特定信件或「要求回信」，請萃取出最具代表性的核心名詞作為 `search_keyword`。若無指定時間預設為今天。
 7. "Proactive_Process" — 要求你主動分析、整理、處理事務
    ✅ 「幫我處理信件」「今天有什麼需要我注意的」「整理一下」「主動看看」
 
