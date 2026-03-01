@@ -38,7 +38,7 @@ def main():
         sys.exit(1)
 
     # 初始化服務
-    _, _, _, sheets = get_google_services()
+    _, _, _, sheets, _ = get_google_services()
     if not sheets:
         logger.error("❌ 無法初始化 Google Sheets 服務")
         sys.exit(1)

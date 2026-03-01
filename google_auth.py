@@ -11,7 +11,8 @@ SCOPES = [
     'https://www.googleapis.com/auth/gmail.compose',
     'https://www.googleapis.com/auth/calendar.readonly',
     'https://www.googleapis.com/auth/tasks',
-    'https://www.googleapis.com/auth/spreadsheets'
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive'
 ]
 
 def clean_api_key(api_key: str) -> str:
@@ -24,7 +25,7 @@ def clean_api_key(api_key: str) -> str:
     return api_key
 
 def get_google_services():
-    """取得 Gmail、Calendar 與 Tasks API 服務。"""
+    """取得 Gmail、Calendar、Tasks、Sheets、Drive API 服務。"""
     creds = None
     
     # 支援從環境變數讀取 token (Cloud Run 必備)
@@ -73,5 +74,6 @@ def get_google_services():
     calendar_service = build('calendar', 'v3', credentials=creds)
     tasks_service = build('tasks', 'v1', credentials=creds)
     sheets_service = build('sheets', 'v4', credentials=creds)
+    drive_service = build('drive', 'v3', credentials=creds)
     
-    return gmail_service, calendar_service, tasks_service, sheets_service
+    return gmail_service, calendar_service, tasks_service, sheets_service, drive_service

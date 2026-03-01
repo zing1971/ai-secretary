@@ -6,11 +6,14 @@ from config import logger
 from line_service import LineService
 from memory_service import MemoryService
 from pinecone_memory import PineconeMemory
+from drive_service import DriveService
+from drive_organizer import DriveOrganizer
 
 class ActionDispatcher:
     """處理各類意圖對應的業務邏輯。"""
     
-    def __init__(self, line_service: LineService, llm_service: LLMService, gmail, calendar, tasks, sheets):
+    def __init__(self, line_service: LineService, llm_service: LLMService,
+                 gmail, calendar, tasks, sheets, drive=None):
         self.line = line_service
         self.llm = llm_service
         self.gmail = gmail
@@ -21,6 +24,15 @@ class ActionDispatcher:
         # 初始化 Pinecone 向量記憶服務
         pinecone_mem = PineconeMemory()
         self.memory = MemoryService(sheets, llm_service, pinecone_mem)
+
+        # 初始化 Drive 整理代理
+        if drive:
+            drive_svc = DriveService(drive)
+            self.drive_organizer = DriveOrganizer(drive_svc, llm_service)
+            logger.info("✅ Drive 整理代理就緒")
+        else:
+            self.drive_organizer = None
+            logger.warning("⚠️ Drive 服務未就緒，整理功能停用")
 
     def dispatch(self, intent: str, user_msg: str, user_id: str, reply_token: str = None):
         """根據意圖分流行動"""
@@ -51,6 +63,39 @@ class ActionDispatcher:
                         self._send_response(user_id, reply_token, "仁哥抱歉，Alice 在存入記憶時遇到了問題，請稍後再試一次 🙇‍♀️")
                 else:
                     self._send_response(user_id, reply_token, "仁哥，Alice 沒有從訊息中找到需要記住的內容，可以再說一次嗎？😊")
+
+            elif intent == "Organize_Drive":
+                # 觸發 Drive 整理掃描與提案
+                if not self.drive_organizer:
+                    self._send_response(user_id, reply_token, "仁哥抱歉，Drive 服務尚未就緒 🙇‍♀️")
+                    return
+                self._send_response(user_id, reply_token, "📂 收到！Alice 正在掃描雲端硬碟，請稍候... ⏳")
+                result = self.drive_organizer.scan_and_propose(user_id)
+                # 提案需透過 push 發送（reply_token 已用完）
+                self.line.push_text(result, to_user_id=user_id)
+
+            elif intent == "Confirm_Action":
+                # 確認執行待處理的操作
+                if self.drive_organizer and self.drive_organizer.has_pending_proposal(user_id):
+                    self._send_response(user_id, reply_token, "🚀 收到！Alice 正在執行整理，請稍候... ⏳")
+                    result = self.drive_organizer.confirm_and_execute(user_id)
+                    self.line.push_text(result, to_user_id=user_id)
+                else:
+                    # 沒有待確認提案，當作一般對話
+                    memories = self.memory.fetch_relevant_memories(user_msg)
+                    response = self.llm.generate_chat_response(user_msg, memories)
+                    self._send_response(user_id, reply_token, response)
+
+            elif intent == "Cancel_Action":
+                # 取消待處理的操作
+                if self.drive_organizer and self.drive_organizer.has_pending_proposal(user_id):
+                    result = self.drive_organizer.cancel_proposal(user_id)
+                    self._send_response(user_id, reply_token, result)
+                else:
+                    # 沒有待確認提案，當作一般對話
+                    memories = self.memory.fetch_relevant_memories(user_msg)
+                    response = self.llm.generate_chat_response(user_msg, memories)
+                    self._send_response(user_id, reply_token, response)
             
             elif intent == "Proactive_Process":
                 # 觸發主動處理流程

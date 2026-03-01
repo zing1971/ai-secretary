@@ -265,3 +265,80 @@ class LLMService:
         except Exception as e:
             logger.error(f"LLM 分析連線失敗: {e}")
             return {"tasks": [], "drafts": [], "briefing": f"仁哥，系統目前有些不穩定：{str(e)}"}
+
+    def analyze_drive_for_organization(self, folders: list, loose_files: list) -> dict:
+        """
+        分析 Drive 根目錄散檔並產生整理計畫。
+
+        Args:
+            folders: 既有資料夾清單 [{name, id}]
+            loose_files: 根目錄散檔 [{name, mimeType, size, modifiedTime}]
+
+        Returns:
+            dict: {
+                "actions": [
+                    {"type": "create_folder", "folder_name": "...", "reason": "..."},
+                    {"type": "move", "file_name": "...", "file_id": "...",
+                     "target_folder": "...", "target_is_new": true/false, "reason": "..."}
+                ],
+                "summary": "整體說明"
+            }
+        """
+        # 準備資料夾和檔案清單文字
+        folder_list = "\n".join([f"  📁 {f['name']}" for f in folders]) if folders else "  （無）"
+        file_list = "\n".join([
+            f"  📄 {f['name']} ({f.get('mimeType', 'unknown')}, "
+            f"修改: {f.get('modifiedTime', 'N/A')[:10]})"
+            for f in loose_files
+        ]) if loose_files else "  （無）"
+
+        system_instruction = f"""{ALICE_PERSONA}
+
+你現在是專業的檔案管理助手。仁哥的 Google 雲端硬碟根目錄有一些散檔需要整理。
+
+【已有的資料夾】
+{folder_list}
+
+【根目錄散檔】
+{file_list}
+
+請分析這些散檔，產生一個合理的整理計畫。
+
+📏 規則：
+1. 只能「建立資料夾」和「移動檔案」，**禁止刪除**
+2. 優先使用已有的資料夾，只在確實需要時才建立新資料夾
+3. 資料夾名稱要簡潔有意義（如：「合約文件」「照片素材」「財務報表」）
+4. 相似類型的檔案歸為同一類
+5. 如果某檔案不確定分類，就不動它
+6. 如果散檔很少或已經很整齊，可以回傳空的 actions
+
+📤 回傳 JSON 格式：
+{{
+  "actions": [
+    {{"type": "create_folder", "folder_name": "新資料夾名", "reason": "原因"}},
+    {{"type": "move", "file_name": "檔案名", "file_id": "檔案ID",
+      "target_folder": "目標資料夾名", "target_is_new": true, "reason": "原因"}}
+  ],
+  "summary": "整體說明（1-2句話）"
+}}
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents="請分析上述 Drive 結構並產生整理計畫。",
+                config={
+                    'system_instruction': system_instruction,
+                    'response_mime_type': 'application/json'
+                }
+            )
+            result = json.loads(response.text)
+            logger.info(f"📋 Drive 整理分析完成: {len(result.get('actions', []))} 項動作")
+            return result
+
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Drive 分析 JSON 解析失敗: {e}")
+            return {"actions": [], "summary": "分析結果格式異常，請稍後再試。"}
+        except Exception as e:
+            logger.error(f"❌ Drive 分析失敗: {e}")
+            return {"actions": [], "summary": f"分析時發生錯誤：{str(e)}"}
+

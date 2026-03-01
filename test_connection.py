@@ -4,7 +4,7 @@ import os
 def test_all_services():
     print("🔍 正在測試 Google 服務連線 (包含 Sheets 記憶功能)...")
     try:
-        gmail, calendar, tasks, sheets = get_google_services()
+        gmail, calendar, tasks, sheets, drive = get_google_services()
         
         print("✅ Gmail 服務已就緒")
         print("✅ Calendar 服務已就緒")

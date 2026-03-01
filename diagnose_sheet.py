@@ -8,7 +8,7 @@ def diagnostic_sheet():
     print(f"🔍 診斷試算表 ID: {Config.GOOGLE_SHEET_ID}")
     
     try:
-        gmail, calendar, tasks, sheets = get_google_services()
+        gmail, calendar, tasks, sheets, drive = get_google_services()
         
         # 1. 取得試算表資訊，確認名稱
         spreadsheet = sheets.spreadsheets().get(spreadsheetId=Config.GOOGLE_SHEET_ID).execute()

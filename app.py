@@ -64,12 +64,12 @@ async def _initialize_all_services(app):
         S.intent_router = IntentRouter(Config.GEMINI_API_KEY)
         logger.info("✅ AI 服務就緒")
 
-        gmail, calendar, tasks, sheets = get_google_services()
+        gmail, calendar, tasks, sheets, drive = get_google_services()
         logger.info("✅ Google 服務就緒")
 
         S.dispatcher = ActionDispatcher(
             S.line_service, S.llm_service,
-            gmail, calendar, tasks, sheets
+            gmail, calendar, tasks, sheets, drive
         )
         logger.info("✅ Dispatcher 就緒")
 
@@ -167,6 +167,41 @@ async def trigger_briefing_get():
             status_code=500,
             content={"status": "error", "message": str(e)}
         )
+
+
+@app.post("/trigger-drive-organize")
+async def trigger_drive_organize():
+    """Cloud Scheduler 定期觸發 Drive 整理掃描"""
+    if not S.ready or not S.dispatcher:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "服務尚未就緒"}
+        )
+
+    try:
+        user_id = S.line_service.user_id
+        if S.dispatcher.drive_organizer:
+            result = S.dispatcher.drive_organizer.scan_and_propose(user_id)
+            S.line_service.push_text(result)
+            logger.info("✅ Drive 整理提案已推送")
+            return JSONResponse(content={"status": "ok", "message": "提案已推送"})
+        else:
+            return JSONResponse(
+                status_code=503,
+                content={"status": "error", "message": "Drive 服務未就緒"}
+            )
+    except Exception as e:
+        logger.error(f"❌ Drive 整理觸發失敗: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
+
+
+@app.get("/trigger-drive-organize")
+async def trigger_drive_organize_get():
+    """GET 方法用於手動測試"""
+    return await trigger_drive_organize()
 
 
 # ===== LINE 訊息處理 =====

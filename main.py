@@ -10,7 +10,7 @@ def main():
     
     # 1. 取得 Google 服務
     try:
-        gmail_service, calendar_service, _ = get_google_services()
+        gmail_service, calendar_service, *_ = get_google_services()
     except Exception as e:
         logger.error(f"Google 驗證失敗: {e}")
         return
