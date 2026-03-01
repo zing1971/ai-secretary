@@ -95,11 +95,12 @@ class DriveOrganizer:
 
         plan = proposal["plan"]
         actions = plan.get("actions", [])
+        loose_files = proposal.get("loose_files", [])
 
         # 清除暫存（不管執行是否成功都清除，避免重複執行）
         del _pending_proposals[user_id]
 
-        return self._execute_plan(actions, proposal["folders"])
+        return self._execute_plan(actions, proposal["folders"], loose_files)
 
     def cancel_proposal(self, user_id: str) -> str:
         """取消待確認的整理提案"""
@@ -167,7 +168,7 @@ class DriveOrganizer:
 
         return "\n".join(lines)
 
-    def _execute_plan(self, actions: list, existing_folders: list) -> str:
+    def _execute_plan(self, actions: list, existing_folders: list, loose_files: list = None) -> str:
         """
         執行整理計畫。
 
@@ -178,6 +179,12 @@ class DriveOrganizer:
 
         # 建立「既有資料夾名→ID」對照表
         folder_map = {f["name"]: f["id"] for f in existing_folders}
+
+        # 建立「檔案名→ID」容錯對照表（防止 AI 用名稱當 file_id）
+        file_name_to_id = {}
+        if loose_files:
+            for f in loose_files:
+                file_name_to_id[f["name"]] = f["id"]
 
         # 統計
         folders_created = 0
@@ -202,6 +209,20 @@ class DriveOrganizer:
                 file_id = action.get("file_id")
                 file_name = action.get("file_name", "未知檔案")
                 target_folder = action.get("target_folder", "")
+
+                # 容錯：若 file_id 看起來不是 Drive ID（Drive ID 通常是 ~30+ 字元英數混合）
+                # 就嘗試用 file_name 反查
+                if file_id and (len(file_id) < 15 or " " in file_id or "." in file_id):
+                    corrected_id = file_name_to_id.get(file_id) or file_name_to_id.get(file_name)
+                    if corrected_id:
+                        logger.warning(f"🔧 修正 file_id: '{file_id}' → '{corrected_id}'")
+                        file_id = corrected_id
+                elif not file_id:
+                    file_id = file_name_to_id.get(file_name)
+
+                if not file_id:
+                    errors.append(f"「{file_name}」→ 找不到檔案 ID")
+                    continue
 
                 target_id = folder_map.get(target_folder)
                 if not target_id:

@@ -287,7 +287,7 @@ class LLMService:
         # 準備資料夾和檔案清單文字
         folder_list = "\n".join([f"  📁 {f['name']}" for f in folders]) if folders else "  （無）"
         file_list = "\n".join([
-            f"  📄 {f['name']} ({f.get('mimeType', 'unknown')}, "
+            f"  📄 [ID:{f['id']}] {f['name']} ({f.get('mimeType', 'unknown')}, "
             f"修改: {f.get('modifiedTime', 'N/A')[:10]})"
             for f in loose_files
         ]) if loose_files else "  （無）"
@@ -316,11 +316,14 @@ class LLMService:
 {{
   "actions": [
     {{"type": "create_folder", "folder_name": "新資料夾名", "reason": "原因"}},
-    {{"type": "move", "file_name": "檔案名", "file_id": "檔案ID",
+    {{"type": "move", "file_name": "檔案名", "file_id": "檔案的ID（[ID:xxx]中的xxx）",
       "target_folder": "目標資料夾名", "target_is_new": true, "reason": "原因"}}
   ],
   "summary": "整體說明（1-2句話）"
 }}
+
+⚠️ 重要：file_id 必須使用上方散檔清單中 [ID:xxx] 裡的值，這是 Google Drive 的檔案識別碼。
+              絕對不要用檔案名稱當 file_id！
 """
         try:
             response = self.client.models.generate_content(
