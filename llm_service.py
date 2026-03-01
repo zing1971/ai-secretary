@@ -392,3 +392,77 @@ class LLMService:
             logger.error(f"❌ Drive 分析失敗: {e}")
             return {"actions": [], "summary": f"分析時發生錯誤：{str(e)}"}
 
+    def format_email_summary(self, emails: list, user_msg: str, memories: str = "", search_keyword: str = "") -> str:
+        """過濾並摘要重點信件"""
+        if not emails:
+            return "仁哥，為您搜尋後目前沒有符合的相關信件。"
+            
+        # 組合信件資料
+        emails_str_list = []
+        for i, email in enumerate(emails):
+            snippet = email.get('body', email.get('snippet', '無內容'))[:300] # 只取前300字給LLM判斷
+            emails_str_list.append(f"[信件 {i+1}] 寄件人: {email['sender']} | 主旨: {email['subject']}\n內容開頭: {snippet}")
+        
+        emails_str = "\n".join(emails_str_list)
+        keyword_context = f"【搜尋目標】{search_keyword}\n" if search_keyword else ""
+        
+        system_instruction = f"""{ALICE_PERSONA}
+
+你的任務是根據仁哥查詢的要求，過濾並整理最近的信件清單。
+【仁哥的記憶與偏好】
+{memories}
+
+{keyword_context}
+【最新信件清單（最多15封片段）】
+{emails_str}
+
+【回覆準則】
+1. 過濾掉明顯的廣告信、通知信或是無關緊要的系統信（除非這些信件符合仁哥指定的搜尋關鍵字）。
+2. 只列出「重要」、「需要處理/回覆」或「與仁哥詢問意圖高度相關」的信件（最好控制在 3~5 封內）。
+3. 針對挑出的每一封信件，列出：寄件人、重點摘要。
+4. 如果沒有找到任何重要信件，請回報「目前信箱很乾淨喔」或「沒有找到相關信件」。
+5. 最後給予一句秘書的貼心建議（例如：是否需要把哪封信列為待辦，或是需要幫忙草擬回信）。
+
+請直接給出傳給仁哥的 LINE 訊息文字，不需要自我介紹或多餘的解說。
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=f"請幫我分析這批信件，仁哥說：「{user_msg}」",
+                config={'system_instruction': system_instruction}
+            )
+            return response.text
+        except Exception as e:
+            logger.error(f"Gemini email filtering failed: {e}")
+            return f"📧 仁哥，系統目前無法幫您進行智慧過濾，為您列出前 3 封信的標題：\n" + "\n".join([e['summary_text'] for e in emails[:3]])
+
+    def generate_email_draft_reply(self, email_data: dict, user_msg: str, memories: str = "") -> str:
+        """根據信件內容與使用者指示，自動生成回信草稿"""
+        system_instruction = f"""你是 Alice，仁哥的專業行政秘書。
+你的任務是根據一封收到的信件，以及仁哥簡單的指令，撰寫一篇正式、得體的回信內容。
+
+【仁哥的風格或相關記憶】
+{memories}
+
+【原始信件資訊】
+寄件人：{email_data.get('sender', '未知')}
+主旨：{email_data.get('subject', '無主旨')}
+內容：
+{email_data.get('body', '無內容')}
+
+【撰寫準則】
+1. 語氣必須以「仁哥（或他的職稱，如果長期記憶中有記載）」的名義發出，或者以「仁哥的秘書 Alice 代為回覆」的名義發出（根據上下文判斷何者合適，預設以仁哥名義）。
+2. 信件內容要符合職場正式禮儀，首尾要有合適的問候與敬語。
+3. 緊扣仁哥給予的指示。
+4. **絕對不要**輸出任何 markdown 格式符號（如 ``` 等），請直接回傳信件的純文字內容。
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=f"請幫我擬一封此信的回覆。仁哥的交代是：「{user_msg}」",
+                config={'system_instruction': system_instruction}
+            )
+            return response.text.strip()
+        except Exception as e:
+            logger.error(f"Gemini draft generation failed: {e}")
+            return "無法根據內容產生合適的回覆，請見諒。"
