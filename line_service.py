@@ -29,4 +29,16 @@ class LineService:
             logger.error(f"回覆訊息失敗: {e}")
             return False
 
+    def get_message_content(self, message_id: str) -> bytes:
+        """取得 LINE 訊息的二進位內容（例如圖片）"""
+        try:
+            message_content = self.api.get_message_content(message_id)
+            chunks = []
+            for chunk in message_content.iter_content():
+                chunks.append(chunk)
+            return b''.join(chunks)
+        except Exception as e:
+            logger.error(f"取得訊息內容失敗: {e}")
+            return None
+
 # ⚠️ 不再在模組層級建立實例，改由 app.py 控制

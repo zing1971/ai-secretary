@@ -466,3 +466,36 @@ class LLMService:
         except Exception as e:
             logger.error(f"Gemini draft generation failed: {e}")
             return "無法根據內容產生合適的回覆，請見諒。"
+
+    def analyze_image_for_actions(self, image_bytes: bytes) -> str:
+        """分析使用者傳來的圖片內容，進行多模態處理"""
+        from google.genai import types
+        
+        system_instruction = f"""{ALICE_PERSONA}
+        
+你在扮演 Alice 秘書。現在仁哥傳了一張圖片給你。
+請發揮專業行政秘書的視覺能力，根據圖片內容提供協助：
+1. 【名片】如果是名片：請整理聯絡資訊（姓名、公司、職稱、電話、Email），並主動詢問是否需要幫忙草擬一封「很高興認識您」的問候信。
+2. 【白板 / 筆記】如果是白板會議記錄或手寫筆記：請整理出條列式重點，若裡面有提到任務，請列出待辦建議。
+3. 【單據 / 發票】如果是發票或收據：擷取最重要的資訊（總金額、日期、品項摘要），詢問是否需要記帳。
+4. 【一般照片】如果是風景、食物等生活照：以秘書的口吻給予溫暖親切的閒聊回應，讚美或關心仁哥。
+
+【要求】
+- 使用繁體中文。
+- 語氣貼心、專業。
+- 條理分明，善用 emoji。
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=[
+                    "仁哥剛傳來了這張圖片，請幫忙看看並處理。",
+                    types.Part.from_bytes(data=image_bytes, mime_type='image/jpeg')
+                ],
+                config={'system_instruction': system_instruction}
+            )
+            return response.text.strip()
+        except Exception as e:
+            logger.error(f"Gemini image analysis failed: {e}")
+            return "仁哥抱歉，Alice 的「眼睛」出了一點小狀況，現在無法看清楚這張圖片 🙇‍♀️"
+

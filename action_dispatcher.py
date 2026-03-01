@@ -173,9 +173,9 @@ class ActionDispatcher:
                         # 呼叫 Gmail API 建立草稿
                         create_gmail_draft(
                             self.gmail,
-                            to_address=target_email['sender'],
+                            to=target_email['sender'],
                             subject=f"Re: {target_email['subject']}",
-                            body_text=draft_body,
+                            body=draft_body,
                             thread_id=target_email.get('threadId')
                         )
                         
@@ -228,3 +228,16 @@ class ActionDispatcher:
         except Exception as e:
             logger.error(f"主動處理失敗: {e}")
             return f"仁哥抱歉，Alice 在處理時遇到了問題：{str(e)} 🙇‍♀️"
+
+    def dispatch_image(self, image_bytes: bytes, user_id: str, reply_token: str):
+        """處理收到的圖片訊息"""
+        logger.info("分派圖片處理")
+        self._send_response(user_id, reply_token, "📸 收到圖片！Alice 正在幫您分析中，請稍候... ⏳")
+        try:
+            response_text = self.llm.analyze_image_for_actions(image_bytes)
+            # 由於前面的 reply_token 已經用來回覆「分析中」，這裡使用 push_text
+            self.line.push_text(response_text, to_user_id=user_id)
+        except Exception as e:
+            logger.error(f"圖片分析分派失敗: {e}")
+            self.line.push_text("仁哥抱歉，Alice在分析這張圖片時遇到了問題 🙇‍♀️", to_user_id=user_id)
+

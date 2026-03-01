@@ -208,7 +208,7 @@ async def trigger_drive_organize_get():
 
 def register_line_handlers(line_svc):
     """註冊 LINE 事件處理函數"""
-    from linebot.models import MessageEvent, TextMessage
+    from linebot.models import MessageEvent, TextMessage, ImageMessage
 
     @line_svc.handler.add(MessageEvent, message=TextMessage)
     def handle_message(event):
@@ -237,6 +237,29 @@ def register_line_handlers(line_svc):
         # 常規意圖分析與分派
         analysis_result = S.intent_router.classify_intent(user_message)
         S.dispatcher.dispatch(analysis_result, user_message, user_id, reply_token=event.reply_token)
+
+    @line_svc.handler.add(MessageEvent, message=ImageMessage)
+    def handle_image_message(event):
+        user_id = event.source.user_id
+        message_id = event.message.id
+
+        logger.info(f"收到圖片訊息 (from {user_id}, msg_id: {message_id})")
+
+        if not S.ready:
+            S.line_service.reply_text(event.reply_token, "仁哥，Alice 正在開機中，請稍等一下喔 ☕")
+            return
+
+        if user_id != S.line_service.user_id:
+            return
+
+        # 讀取圖片二進位資料
+        image_bytes = S.line_service.get_message_content(message_id)
+        
+        if image_bytes:
+            # 傳給 dispatcher 處理多模態視覺需求
+            S.dispatcher.dispatch_image(image_bytes, user_id, reply_token=event.reply_token)
+        else:
+            S.line_service.reply_text(event.reply_token, "仁哥抱歉，Alice 無法讀取這張圖片 🙇‍♀️")
 
 
 # ===== 啟動入口 =====
