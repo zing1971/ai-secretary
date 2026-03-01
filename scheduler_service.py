@@ -1,72 +1,33 @@
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-import pytz
-from datetime import datetime
+"""
+排程服務工具模組
 
-from config import logger
-from google_auth import get_google_services
-from action_dispatcher import ActionDispatcher
+注意：Cloud Run 環境下不使用 APScheduler（容器會休眠）。
+改由 Google Cloud Scheduler 定時呼叫 /trigger-briefing 端點。
 
-# 設定時區
-TIMEZONE = pytz.timezone('Asia/Taipei')
+此模組僅保留簡報邏輯函數，供 app.py 直接呼叫或本地測試使用。
+"""
+import logging
 
-async def send_morning_briefing(line_bot_api, user_id):
-    """執行早晨簡報任務。"""
-    logger.info(f"[{datetime.now(TIMEZONE)}] 開始執行定時早晨簡報任務...")
+logger = logging.getLogger("AI-Secretary")
+
+
+def execute_morning_briefing(dispatcher, line_service):
+    """
+    執行早安簡報的核心邏輯。
     
+    Args:
+        dispatcher: ActionDispatcher 實例
+        line_service: LineService 實例
+    
+    Returns:
+        str: 簡報內容
+    """
     try:
-        # 1. 取得服務
-        gmail_service, calendar_service, tasks_service, sheets_service = get_google_services()
-        
-        if not all([gmail_service, calendar_service, tasks_service, sheets_service]):
-            logger.warning("Google 服務授權不全，取消簡報。")
-            return
-
-        # 2. 使用 Dispatcher 處理主動流程 (共用邏輯)
-        from line_service import LineService
-        from llm_service import LLMService
-        from config import Config
-        from action_dispatcher import ActionDispatcher
-        
-        # 建立簡報專屬的 Dispatcher 環境
-        ls = LineService() # 用於發送
-        llm = LLMService(Config.GEMINI_API_KEY)
-        
-        dispatcher = ActionDispatcher(
-            ls, 
-            llm, 
-            gmail_service, 
-            calendar_service, 
-            tasks_service, 
-            sheets_service
-        )
         report = dispatcher.handle_proactive_process()
-        
-        # 3. 組合推送訊息
         push_msg = f"🌅 【早安簡報】\n{report}"
-        
-        # 4. 推送到 LINE
-        from linebot.models import TextSendMessage
-        line_bot_api.push_message(user_id, TextSendMessage(text=push_msg))
-        logger.info("早晨簡報推送成功！")
-        
+        line_service.push_text(push_msg)
+        logger.info("✅ 早安簡報推送成功！")
+        return push_msg
     except Exception as e:
-        logger.error(f"執行定時簡報時發生錯誤: {e}")
-
-def setup_scheduler(line_bot_api, user_id):
-    """初始化並啟動排程器。"""
-    scheduler = AsyncIOScheduler(timezone=TIMEZONE)
-    
-    # 設定每天早上 7:00 執行
-    scheduler.add_job(
-        send_morning_briefing,
-        CronTrigger(hour=7, minute=0),
-        args=[line_bot_api, user_id],
-        id='morning_briefing',
-        name='Daily Morning Briefing',
-        replace_existing=True
-    )
-    
-    scheduler.start()
-    logger.info("排程器已啟動，目標時間：每日 07:00 (Taipei)")
-    return scheduler
+        logger.error(f"❌ 早安簡報執行失敗: {e}")
+        raise

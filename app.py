@@ -20,7 +20,7 @@ logger.info(f"🔧 PORT={os.getenv('PORT', '8080')}")
 
 # ===== 第二步：建立 FastAPI 應用（極輕量）=====
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
 from contextlib import asynccontextmanager
 
 
@@ -42,21 +42,17 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_initialize_all_services(app))
     yield
     logger.info("🛑 伺服器關閉中...")
-    if hasattr(app.state, 'scheduler'):
-        app.state.scheduler.shutdown()
 
 
 async def _initialize_all_services(app):
     """背景初始化所有服務（不阻塞 8080 埠口）"""
     try:
-        # 在這裡才開始 import 重型模組
         from config import Config
         from line_service import LineService
         from google_auth import get_google_services
         from llm_service import LLMService
         from intent_router import IntentRouter
         from action_dispatcher import ActionDispatcher
-        from scheduler_service import setup_scheduler
 
         Config.validate()
 
@@ -76,13 +72,6 @@ async def _initialize_all_services(app):
             gmail, calendar, tasks, sheets
         )
         logger.info("✅ Dispatcher 就緒")
-
-        try:
-            scheduler = setup_scheduler(S.line_service.api, S.line_service.user_id)
-            app.state.scheduler = scheduler
-            logger.info("✅ 排程器就緒")
-        except Exception as e:
-            logger.warning(f"⚠️ 排程器啟動失敗: {e}")
 
         S.ready = True
         logger.info("🎉 AI 秘書完全上線！")
@@ -118,11 +107,69 @@ async def callback(request: Request):
         S.line_service.handler.handle(body_str, signature)
     except Exception as e:
         logger.error(f"Webhook 處理異常: {e}")
-        # LINE 需要收到 200，不然會重試
         return PlainTextResponse("OK")
 
     return PlainTextResponse("OK")
 
+
+# ===== 新增：Cloud Scheduler 觸發的每日簡報端點 =====
+
+@app.post("/trigger-briefing")
+async def trigger_briefing(request: Request):
+    """
+    由 Google Cloud Scheduler 定時呼叫的端點。
+    觸發每日早安簡報流程：讀取行程 + 信件 → AI 分析 → 推送到 LINE。
+    """
+    logger.info("📩 收到簡報觸發請求")
+
+    if not S.ready or not S.dispatcher:
+        logger.warning("服務尚未就緒，無法執行簡報。")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "服務尚未就緒"}
+        )
+
+    try:
+        # 執行主動處理流程
+        report = S.dispatcher.handle_proactive_process()
+
+        # 組合並推送訊息
+        push_msg = f"🌅 【早安簡報】\n{report}"
+        S.line_service.push_text(push_msg)
+
+        logger.info("✅ 早安簡報推送成功！")
+        return JSONResponse(content={"status": "ok", "message": "簡報已推送"})
+
+    except Exception as e:
+        logger.error(f"❌ 簡報執行失敗: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
+
+
+@app.get("/trigger-briefing")
+async def trigger_briefing_get():
+    """GET 方法用於手動測試"""
+    if not S.ready or not S.dispatcher:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "服務尚未就緒"}
+        )
+
+    try:
+        report = S.dispatcher.handle_proactive_process()
+        push_msg = f"🌅 【早安簡報】\n{report}"
+        S.line_service.push_text(push_msg)
+        return JSONResponse(content={"status": "ok", "message": "簡報已推送"})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
+
+
+# ===== LINE 訊息處理 =====
 
 def register_line_handlers(line_svc):
     """註冊 LINE 事件處理函數"""
@@ -142,12 +189,17 @@ def register_line_handlers(line_svc):
         if user_id != S.line_service.user_id:
             return
 
+        # 手動測試簡報指令
         if user_message == "測試排程":
-            from scheduler_service import send_morning_briefing
-            asyncio.create_task(send_morning_briefing(S.line_service.api, user_id))
-            S.line_service.reply_text(event.reply_token, "好的老闆，正在執行簡報測試...")
+            try:
+                report = S.dispatcher.handle_proactive_process()
+                push_msg = f"🌅 【早安簡報】\n{report}"
+                S.line_service.reply_text(event.reply_token, push_msg)
+            except Exception as e:
+                S.line_service.reply_text(event.reply_token, f"簡報執行失敗: {e}")
             return
 
+        # 常規意圖分析與分派
         analysis_result = S.intent_router.classify_intent(user_message)
         intent = analysis_result.get("intent", "Chat")
         S.dispatcher.dispatch(intent, user_message, user_id, reply_token=event.reply_token)

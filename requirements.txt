@@ -5,8 +5,6 @@ google-genai
 line-bot-sdk
 python-dotenv
 requests
-apscheduler
 pytz
 fastapi
 uvicorn
-Pillow
