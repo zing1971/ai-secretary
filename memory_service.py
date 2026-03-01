@@ -40,16 +40,21 @@ class MemoryService:
 
     # ===== 儲存記憶 =====
 
-    def save_memory(self, fact_data) -> bool:
+    def save_memory(self, fact_data) -> str:
         """
         儲存結構化記憶，支援衝突偵測。
         
         Args:
             fact_data: dict {"fact": str, "category": str, "entities": list}
                        或 str（向下相容舊格式）
+        Returns:
+            "new" - 新增成功
+            "duplicate" - 重複跳過
+            "updated" - 衝突更新
+            "error" - 儲存失敗
         """
         if not self._ensure_range_name():
-            return False
+            return "error"
 
         # 向下相容：如果傳入純字串，包裝為 dict
         if isinstance(fact_data, str):
@@ -65,20 +70,20 @@ class MemoryService:
         entities_str = ", ".join(entities) if entities else ""
 
         if not fact:
-            return False
+            return "error"
 
         try:
-            # 衝突偵測：檢查同分類是否有矛盾的記憶
+            # 衝突偵測：跨分類搜尋全部記憶
             if self.llm:
                 conflict_result = self._check_and_resolve_conflict(
                     fact, category
                 )
                 if conflict_result == "duplicate":
                     logger.info(f"⏭️ 跳過重複記憶: {fact}")
-                    return True  # 重複不算失敗
+                    return "duplicate"
                 elif conflict_result == "updated":
                     logger.info(f"🔄 已更新既有記憶: {fact}")
-                    return True
+                    return "updated"
 
             # 新增記憶
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -93,15 +98,15 @@ class MemoryService:
             ).execute()
 
             logger.info(f"✅ 存入記憶 [{category}]: {fact}")
-            return True
+            return "new"
 
         except Exception as e:
             logger.error(f"❌ 存入記憶失敗: {str(e)}")
-            return False
+            return "error"
 
     def _check_and_resolve_conflict(self, new_fact: str, category: str):
         """
-        檢查並處理記憶衝突。
+        檢查並處理記憶衝突（搜尋全部記憶，不限分類）。
         
         Returns:
             "new" - 無衝突，需要新增
@@ -109,12 +114,12 @@ class MemoryService:
             "updated" - 已更新舊記錄
         """
         try:
-            # 取得同分類的所有記憶
-            same_category = self._get_memories_by_category(category)
-            if not same_category:
+            # 取得全部記憶（跨分類比對，避免舊資料漏掉）
+            all_rows = self._get_all_rows()
+            if not all_rows:
                 return "new"
 
-            existing_facts = [row["fact"] for row in same_category]
+            existing_facts = [row["fact"] for row in all_rows]
 
             # 用 LLM 判斷衝突
             conflict = self.llm.check_memory_conflict(new_fact, existing_facts)
@@ -123,22 +128,23 @@ class MemoryService:
                 return "new"
 
             reason = conflict.get("reason", "")
+            logger.info(f"🔍 衝突偵測結果: {reason}")
 
             # 如果是重複
-            if "重複" in reason:
+            if "重複" in reason or "相同" in reason:
                 return "duplicate"
 
             # 如果是更新（衝突），覆蓋舊記錄
             conflict_idx = conflict.get("conflict_index")
-            if conflict_idx is not None and 0 <= conflict_idx < len(same_category):
-                old_row = same_category[conflict_idx]
+            if conflict_idx is not None and 0 <= conflict_idx < len(all_rows):
+                old_row = all_rows[conflict_idx]
                 row_number = old_row["row_number"]
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 entities_str = ", ".join(
                     self.llm.extract_search_keywords(new_fact)
                 ) if self.llm else ""
 
-                # 覆蓋既有列
+                # 覆蓋既有列（同時更新分類）
                 self.service.spreadsheets().values().update(
                     spreadsheetId=self.spreadsheet_id,
                     range=f"{self.range_name}!A{row_number}:D{row_number}",
@@ -152,6 +158,7 @@ class MemoryService:
                 return "updated"
 
             return "new"
+
 
         except Exception as e:
             logger.warning(f"⚠️ 衝突偵測失敗，直接新增: {e}")

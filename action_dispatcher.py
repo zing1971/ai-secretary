@@ -33,10 +33,16 @@ class ActionDispatcher:
                 # 萃取結構化事實並存入 Google Sheets
                 fact_data = self.llm.extract_fact_to_remember(user_msg)
                 if fact_data and fact_data.get("fact"):
-                    if self.memory.save_memory(fact_data):
-                        cat_label = fact_data.get('category', '')
-                        fact_text = fact_data.get('fact', '')
+                    cat_label = fact_data.get('category', '')
+                    fact_text = fact_data.get('fact', '')
+                    result = self.memory.save_memory(fact_data)
+                    
+                    if result == "new":
                         self._send_response(user_id, reply_token, f"✅ 收到，Alice 已經幫仁哥記下了：\n📁 分類：{cat_label}\n📝 {fact_text}")
+                    elif result == "duplicate":
+                        self._send_response(user_id, reply_token, f"仁哥，這個 Alice 已經記過了喔 😊\n📝 {fact_text}")
+                    elif result == "updated":
+                        self._send_response(user_id, reply_token, f"🔄 收到，Alice 已經幫仁哥更新記憶了：\n📁 分類：{cat_label}\n📝 {fact_text}")
                     else:
                         self._send_response(user_id, reply_token, "仁哥抱歉，Alice 在存入記憶時遇到了問題，請稍後再試一次 🙇‍♀️")
                 else:
