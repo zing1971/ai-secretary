@@ -19,9 +19,9 @@ def extract_email_body(payload):
 
 def get_recent_emails(service, query=None, max_results=15):
     """依照給定 query 取得信件。若無指定，預設取得過去 24 小時內的未讀信件。"""
-    if query is None:
-        time_24h_ago = datetime.datetime.utcnow() - datetime.timedelta(days=1)
-        query = f"is:unread after:{int(time_24h_ago.timestamp())}"
+    if query is None or query.strip() == "":
+        time_3d_ago = datetime.datetime.utcnow() - datetime.timedelta(days=3)
+        query = f"is:unread after:{int(time_3d_ago.timestamp())}"
     
     results = service.users().messages().list(userId='me', q=query, maxResults=max_results).execute()
     messages = results.get('messages', [])

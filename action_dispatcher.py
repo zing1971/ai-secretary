@@ -192,9 +192,9 @@ class ActionDispatcher:
                         # 呼叫 Gmail API 建立草稿
                         create_gmail_draft(
                             self.gmail,
-                            to=target_email['sender'],
+                            to_email=target_email['sender'],
                             subject=f"Re: {target_email['subject']}",
-                            body=draft_body,
+                            body_text=draft_body,
                             thread_id=target_email.get('threadId')
                         )
                         
