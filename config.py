@@ -49,6 +49,11 @@ class Config:
     GOOGLE_SHEET_ID = _get_env("GOOGLE_SHEET_ID", "")
     PINECONE_API_KEY = _get_env("PINECONE_API_KEY", "")
 
+    # NotebookLM IDs
+    NOTEBOOK_ID_INFOSEC = _get_env("NOTEBOOK_ID_INFOSEC", "")
+    NOTEBOOK_ID_IT = _get_env("NOTEBOOK_ID_IT", "")
+    NOTEBOOK_ID_TRENDS = _get_env("NOTEBOOK_ID_TRENDS", "")
+
     PORT = int(os.getenv("PORT", "8080"))
     DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 

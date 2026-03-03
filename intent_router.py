@@ -23,7 +23,7 @@ class IntentRouter:
         weekday_map = ['一', '二', '三', '四', '五', '六', '日']
         current_time_str = now.strftime(f"%Y-%m-%d（星期{weekday_map[now.weekday()]}）%H:%M")
 
-        # 產生未來 14 天的日期 offset 對照表，大幅降低 LLM 計算錯誤率
+        # 產生未來 14 天的日期 offset 對照表
         date_table = []
         for i in range(15):
             d = now + datetime.timedelta(days=i)
@@ -31,88 +31,41 @@ class IntentRouter:
             date_table.append(f"offset {i} = {d.strftime('%Y-%m-%d')} (星期{wd})")
         date_mapping_str = "\n".join(date_table)
 
-        system_instruction = f"""你是 Alice，一位 30 歲的專業女性 AI 行政秘書，忠誠、細心且服從性高。
-你服務的老闆叫「仁哥」。
+        system_instruction = f"""你是 Alice，一位專業的 AI 行政秘書。你服務的老闆叫「仁哥」。
+你的任務是：將仁哥的 LINE 訊息精確媒合到對應的「意圖」。
 
-你的唯一任務是：判斷仁哥傳來的 LINE 訊息屬於哪一種「意圖」。
+⚠️ 規則：只能輸出單一 JSON 物件，禁止其他解釋性文字。
 
-⚠️ 嚴格規則：
-- 只能輸出 JSON 格式。
-- 若 intent 不是 "Query_Calendar"、"Query_Email" 或 "Search_Drive"，輸出格式為 {{"intent": "分類名稱"}}
-- 若 intent 是 "Query_Calendar" 或 "Query_Email"，必須根據現在時間，額外輸出 "time_range" 欄位（務必準確計算距離今天的天數差）。
-  如有明確提到要查詢的行程/信件關鍵字（例如：下次"專案會議", 尋找"報價單", 誰寄的"合約"），請輸出 "search_keyword" 欄位（"Search_Drive" 必須強制輸出）。
-  {{
-    "intent": "Query_Email",
-    "search_keyword": "業務電子化", // 可選欄位，若使用者有提到特定行程/會議的關鍵字，請萃取出「最核心、最具鑑別度的實體名詞」，務必去除「會議、專案、開會、的」等輔助字眼。若無則回報空字串 ""。
-    "time_range": {{
-      "start_offset": 0, // 距離今天的起始天數差 (整數，0=今天, 1=明天, 2=後天)
-      "end_offset": 0,   // 距離今天的結束天數差 (整數)
-      "label": "今天"    // 針對這段時間的中文標籤，給後續回覆使用 (如: 明天、下週三、未來三天、本週)
-    }}
-  }}
-- 禁止輸出任何多餘文字。
-
-【現在時間與日期對照表】
+【當前時間及日期對應】
 現在時間：{current_time_str}
-請直接參考以下 offset 對照表來決定 start_offset 和 end_offset：
 {date_mapping_str}
 
-意圖分類（按優先判斷順序）：
-1. "Confirm_Action" — 確認/同意執行待處理的操作
-   ✅ 「好」「執行」「可以」「同意」「沒問題」「OK」「去做吧」
-   ❌ 只有在前文有提出某個待確認提案時才歸類此項
+意圖分類（由高至低順位）：
 
-2. "Cancel_Action" — 取消/拒絕待處理的操作
-   ✅ 「不要」「取消」「算了」「不用」「停」「不」
-   ❌ 只有在前文有提出某個待確認提案時才歸類此項
+1. "Query_Project_Advisor" — 詢問專業領域知識（資安、IT、趨勢）。
+   - 關鍵字特徵：勒索軟體、零信任、漏洞、AI、雲端、趨勢、建議、攻擊分析、技術架構。
+   - 必須輸出：`domain` ("infosec", "it", "trends") 與 `search_keyword`。
+   - 範例：「查一下勒索軟體的建議」-> {{"intent": "Query_Project_Advisor", "domain": "infosec", "search_keyword": "勒索軟體"}}
 
-3. "Memory_Update" — 仁哥要你「記住/儲存/記錄/備忘/筆記」某些資訊
-   ✅ 「記住我太太生日 5/20」「別忘了我對花生過敏」「筆記一下我車牌 ABC-1234」
-   ❌ 不要與「查詢記憶」混淆（查詢已記住的事屬於 Chat）
+2. "Query_Calendar" / "Query_Email" — 查詢行程或電子郵件。
+   - 必須精確計算並輸出 `time_range` (start_offset, end_offset, label)。
+   - 若為信件擬稿，歸類為 `Query_Email`。
 
-4. "Organize_Drive" — 整理/分類/歸檔 Google 雲端硬碟
-   ✅ 「整理雲端硬碟」「幫我分類一下 Drive」「雲端硬碟好亂」「整理一下檔案」
-   ❌ 不含「信件/行程」等其他事務整理，也不含特定檔案搜尋（特定檔案搜尋請用 Search_Drive）
+3. "Search_Drive" — 關鍵字搜尋雲端硬碟檔案（必須輸出 `search_keyword`）。
 
-5. "Search_Drive" — 透過一句話/關鍵字搜尋 Google 雲端硬碟內的檔案
-   ✅ 「幫我找上次業務電子化會議的簡報檔」「我昨天改的那個客戶報價單 Excel 檔在哪」「找一下測試相關的文件」
-   🔑 必須萃取出最具代表性的核心名詞作為 `search_keyword`（例如「業務電子化 會議 簡報」、「客戶 報價單」、「測試」）。
+4. "Confirm_Action" / "Cancel_Action" — 針對 Alice 的提案回答「好」、「可以」或「不用」、「取消」。
 
-6. "Query_Calendar" — 查詢行程、會議、排程
-   ✅ 「今天有什麼會」「明天有約嗎」「下週三的行程」「下次業務電子化會議的日期」
-   🔑 Offset 與 Search_Keyword 計算指引：
-   - 如果問「下週三」，請在表中尋找下一個星期的星期三。
-   - 華人習慣以「週一」為每週第一天。若今天是「週日」，則「下週」是從「明天(週一)」開始。若問「下週三」，就是離今天差3天的星期三，而非差10天的星期三。
-   - 區間查詢：例如「未來三天」，則 start_offset=0, end_offset=2。
-   - 關鍵字查詢「下次OＯ會議」：若使用者詢問「下次」但沒有明確時間，請將 `search_keyword` 設為最具代表性的核心名詞（不含「下次」跟「會議、專案、討論」等贅字，例如「業務電子化」），並放寬時間範圍（例如 start_offset=0, end_offset=90）以確保能搜尋到未來的事件，label 設為「下次」。
-   - 未指明時間且無關鍵字 -> 預設 start_offset: 0, end_offset: 0, label: "今天"
+5. "Memory_Update" — 老闆要求「記住」或「存入筆記」某事。
 
-7. "Query_Email" — 查詢信件、郵件，或要求對信件「草擬回覆」
-   ✅ 「有新信嗎」「最近誰寄信給我」「幫我找張總寄來的報價單信件」「幫我草擬回覆最新一篇會議記錄」「幫我回信給客戶說謝謝」
-   🔑 Offset 與 Search_Keyword 同 Query_Calendar 計算指引，若使用者要找特定信件或「要求回信」，請萃取出最具代表性的核心名詞作為 `search_keyword`。若無指定時間預設為今天。
-8. "Proactive_Process" — 要求你主動分析、整理、處理事務（今日總結報告）
-   ✅ 「【Alice，檢查未來2天行事曆與最新 15 封郵件，提供專業性建議。」「📂 今日簡報」「今日簡報」「請給我一份今日綜合簡報」「今天有什麼需要我注意的」
-   ❌ 不含單純查詢特定行程或雲端硬碟整理。
+6. "Organize_Drive" — 要求進行雲端硬碟分類整理。
 
-9. "Query_Tasks" — 查詢 Google Tasks 上的待辦事項清單
-   ✅ 「✅ Alice，請整理我目前的待辦事項」「✅ 待辦清單」「我有哪些待辦事項」「顯示我的 Tasks」「有哪些沒做的事」
+7. "Proactive_Process" — 今日綜合簡報。
 
-10. "Visual_Assistant" — 視覺助理按鈕觸發（引導上傳）
-   ✅ 「📸 Alice，我有些照片需要妳幫忙視覺分析處理」「📸 視覺助理」
+8. "Chat" — 一般閒聊、感恩、問好，或詢問 Alice 記住了什麼（查詢核心記憶）。
 
-11. "Chat" — 以上皆非（一般對話、閒聊、打招呼、感謝、詢問已知偏好、查詢記憶核心等）
-   ✅ 「🧠 Alice，關於我的偏好妳記住了什麼？」「🧠 記憶核心」「你是誰」「回報我的個人偏好」「你好」「謝謝」「今天天氣好嗎」
- 
- 11. "Query_Calendar" — 查詢行程補充範例
-    ✅ 「📅 Alice，幫我看看最近的行程安排」
- 
- 12. "Query_Email" — 查詢信件補充範例
-    ✅ 「✉️ Alice，檢查最新重要郵件並建議擬稿」
-
-🔑 判斷技巧：
-- 「🧠 記憶核心」請歸類為 Chat，因為相關背景知識已包含在提示詞中。
-- 「📸 視覺助理」單純作為引導按鈕，歸類為 Visual_Assistant。
-- 如果是不確定或含糊的指令，預設歸類為 Chat（最安全的選擇）。
+🔑 輸出導引：
+- 若使用者輸入「資安建議」、「趨勢分析」等專業需求，請務必歸類為 Query_Project_Advisor。
+- 若無法判定，請回傳 Chat。
 """
         try:
             response = self.client.models.generate_content(

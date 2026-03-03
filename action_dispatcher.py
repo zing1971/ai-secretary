@@ -11,6 +11,8 @@ from memory_service import MemoryService
 from pinecone_memory import PineconeMemory
 from drive_service import DriveService
 from drive_organizer import DriveOrganizer
+from notebooklm_service import NotebookLMService
+import threading
 
 class ActionDispatcher:
     """處理各類意圖對應的業務邏輯。"""
@@ -24,6 +26,9 @@ class ActionDispatcher:
         self.tasks = tasks
         self.sheets = sheets
         self.people = people
+        
+        # 初始化 NotebookLM 專家服務
+        self.notebooklm = NotebookLMService()
 
         # 初始化 Pinecone 向量記憶服務
         pinecone_mem = PineconeMemory()
@@ -215,9 +220,44 @@ class ActionDispatcher:
                         self._send_response(user_id, reply_token, summary_msg)
                 else:
                     self._send_response(user_id, reply_token, "仁哥，為您搜尋後目前沒有符合的相關信件。")
+            
+            elif intent == "Query_Project_Advisor":
+                domain = intent_data.get("domain", "it")
+                search_keyword = intent_data.get("search_keyword", user_msg)
+                
+                # 立即回覆告知正在查詢中 (避免 LINE Webhook 超時)
+                domain_names = {"infosec": "資通安全", "it": "資訊科技", "trends": "國際趨勢"}
+                domain_name = domain_names.get(domain, "專業領域")
+                self._send_response(user_id, reply_token, f"📚 沒問題，Alice 正在查看「{domain_name}」知識庫為您尋找答案，請稍候片刻... ⏳")
+                
+                # 開啟執行緒進行非同步查詢與回傳
+                thread = threading.Thread(
+                    target=self._async_notebooklm_query,
+                    args=(user_id, search_keyword, domain)
+                )
+                thread.start()
+
         except Exception as e:
             logger.error(f"處理分派時異常: {e}")
             self._send_response(user_id, reply_token, f"仁哥抱歉，Alice 處理時遇到了問題：{str(e)} 🙇‍♀️")
+
+    def _async_notebooklm_query(self, user_id: str, query: str, domain: str):
+        """非同步執行 NotebookLM 查詢並推送結果"""
+        try:
+            # 1. 向 NotebookLM 專家查詢
+            result = self.notebooklm.query_advisor(query, domain)
+            raw_answer = result.get("answer", "")
+            
+            # 2. 透過 LLM 轉化為 Alice 的口吻報告
+            formatted_report = self.llm.format_domain_advisor_reply(query, domain, raw_answer)
+            
+            # 3. 透過 LINE Push 推送結果
+            self.line.push_text(formatted_report, to_user_id=user_id)
+            
+            logger.info(f"✅ NotebookLM 查詢任務完成 (錄入用戶: {user_id})")
+        except Exception as e:
+            logger.error(f"❌ _async_notebooklm_query 執行失敗: {e}")
+            self.line.push_text(f"報告仁哥，剛才在查閱「{domain}」知識庫時，技術上突然卡住了... 🙇‍♀️", to_user_id=user_id)
 
     def _send_response(self, user_id, reply_token, text):
         """核心回覆邏輯：優先使用 reply_token，失敗則使用 push_text"""

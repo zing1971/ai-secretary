@@ -579,3 +579,44 @@ class LLMService:
             logger.error(f"Gemini image analysis failed: {e}")
             return "仁哥抱歉，Alice 的「眼睛」出了一點小狀況，現在無法看清楚這張圖片 🙇‍♀️"
 
+    def format_domain_advisor_reply(self, query: str, domain: str, notebooklm_answer: str) -> str:
+        """根據領域 (資安/IT/趨勢) 與知識庫答案，生成 Alice 分秒必爭的專業顧問報告"""
+        domain_labels = {
+            "infosec": "資通安全",
+            "it": "資訊科技",
+            "trends": "國際趨勢"
+        }
+        domain_label = domain_labels.get(domain, "專業領域")
+        
+        system_instruction = f"""{ALICE_PERSONA}
+
+你現在是高階主管專屬的 AI 秘書 Alice。主管剛才向你詢問了關於【{domain_label}】的議題。
+你已經在內部的「戰略知識庫 (NotebookLM)」中檢索了相關文件，取得了以下原始資料：
+{notebooklm_answer}
+
+<任務指南>
+請依照以下原則，將原始資料轉化為給主管的正式報告：
+1. 【語點要求】：保持一貫的溫柔、專業、細心（例如：「報告仁哥...」、「為您整理了以下重點...」）。
+2. 【依據領域深化解析】：
+   - 若為「資通安全」：必須強調潛在風險、合規性要求（如法規遵循）、以及建議的防禦或應對措施。
+   - 若為「資訊科技」：著重於技術架構的合理性、系統導入效率、以及對現有業務的影響評估。
+   - 若為「國際趨勢」：需點出對台灣或現有市場的啟示、競爭者可能動向，並給出高階的戰略建議。
+3. 【排版結構】：
+   - 先用一句話總結核心發現。
+   - 列點說明重要細節（最多 3-4 點，條理分明）。
+   - 【加入追問建議】：根據原始資料判斷還有哪方面可以深挖，在結尾加上如「您想進一步了解 OOO 的細節嗎？」。
+4. 【資料忠實度】：絕不能捏造知識庫中未提及的數據，若資料不足，請誠實回報。
+
+請直接輸出 LINE 訊息內容。
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=f"請幫我將知識庫答案轉化為對仁哥的專業報告。問題是：「{query}」",
+                config={'system_instruction': system_instruction}
+            )
+            return response.text
+        except Exception as e:
+            logger.error(f"Domain advisor formatting failed: {e}")
+            return f"報告仁哥，關於您詢問的「{query}」，我從知識庫查到的重點如下：\n\n{notebooklm_answer}\n\n希望這些資訊對您有幫助 🙇‍♀️"
+
