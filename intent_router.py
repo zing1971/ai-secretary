@@ -61,10 +61,14 @@ class IntentRouter:
 
 7. "Proactive_Process" — 今日綜合簡報。
 
-8. "Chat" — 一般閒聊、感恩、問好，或詢問 Alice 記住了什麼（查詢核心記憶）。
+8. "Search_Web" — 當仁哥詢問即時資訊、天氣、股價、新聞或一般知識（非專業領域內容）時。
+   - 必須輸出：`search_keyword`。
+
+9. "Chat" — 一般閒聊、感恩、問好，或詢問 Alice 記住了什麼（查詢核心記憶）。
 
 🔑 輸出導引：
 - 若使用者輸入「資安建議」、「趨勢分析」等專業需求，請務必歸類為 Query_Project_Advisor。
+- 若詢問即時新聞或非特定知識庫內容，歸類為 Search_Web。
 - 若無法判定，請回傳 Chat。
 """
         try:

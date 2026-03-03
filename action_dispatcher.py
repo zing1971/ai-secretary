@@ -225,7 +225,7 @@ class ActionDispatcher:
                 domain = intent_data.get("domain", "it")
                 search_keyword = intent_data.get("search_keyword", user_msg)
                 
-                # 立即回覆告知正在查詢中 (避免 LINE Webhook 超時)
+                # 立即回覆告知正在查詢中
                 domain_names = {"infosec": "資通安全", "it": "資訊科技", "trends": "國際趨勢"}
                 domain_name = domain_names.get(domain, "專業領域")
                 self._send_response(user_id, reply_token, f"📚 沒問題，Alice 正在查看「{domain_name}」知識庫為您尋找答案，請稍候片刻... ⏳")
@@ -237,9 +237,36 @@ class ActionDispatcher:
                 )
                 thread.start()
 
+            elif intent == "Search_Web":
+                search_keyword = intent_data.get("search_keyword", user_msg)
+                
+                # 立即回覆告知正在搜尋中
+                self._send_response(user_id, reply_token, f"🌐 收到，Alice 正在透過網路搜尋「{search_keyword}」的最新資訊，請稍候... ⏳")
+                
+                # 開啟執行緒進行非同步搜尋
+                thread = threading.Thread(
+                    target=self._async_web_search,
+                    args=(user_id, search_keyword)
+                )
+                thread.start()
+
         except Exception as e:
             logger.error(f"處理分派時異常: {e}")
             self._send_response(user_id, reply_token, f"仁哥抱歉，Alice 處理時遇到了問題：{str(e)} 🙇‍♀️")
+
+    def _async_web_search(self, user_id: str, query: str):
+        """非同步執行網際網路搜尋並推送結果"""
+        try:
+            # 1. 執行搜尋並格式化回覆 (利用 Gemini 2.0 內建搜尋能力)
+            formatted_report = self.llm.perform_web_search(query)
+            
+            # 2. 透過 LINE Push 推送結果
+            self.line.push_text(formatted_report, to_user_id=user_id)
+            
+            logger.info(f"✅ 網際網路搜尋任務完成 (用戶: {user_id})")
+        except Exception as e:
+            logger.error(f"❌ _async_web_search 執行失敗: {e}")
+            self.line.push_text(f"報告仁哥，剛才在網路搜尋「{query}」時，技術上突然卡住了... 🙇‍♀️", to_user_id=user_id)
 
     def _async_notebooklm_query(self, user_id: str, query: str, domain: str):
         """非同步執行 NotebookLM 查詢並推送結果"""
