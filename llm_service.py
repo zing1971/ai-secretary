@@ -155,6 +155,39 @@ class LLMService:
             logger.error(f"Tasks formatting failed: {e}")
             return f"✅ 仁哥，您的待辦事項如下：\n{tasks_str}\n\n加油喔！Alice 會在旁邊支援您的 💪"
 
+    def format_drive_search_results(self, files: list, user_msg: str) -> str:
+        """根據 Google Drive 搜尋結果，用 Alice 口吻生成格式化回覆"""
+        if not files:
+            return "仁哥，抱歉，我剛剛在雲端硬碟裡找過了，沒有發現符合的檔案喔 😥"
+
+        files_info = "\n".join([f"- [{f.get('name')}]({f.get('webViewLink')})" for f in files])
+        
+        system_instruction = f"""{ALICE_PERSONA}
+
+你的任務是根據 Google Drive 的搜尋結果，生動地回報給仁哥。
+
+【搜尋結果】
+{files_info}
+
+【回覆規則】
+1. 語氣溫柔專業，像是親手幫老闆找到檔案一樣。
+2. 開頭可以說「仁哥，我幫您找到了這幾份相關的檔案：」或類似的自然開場。
+3. 把檔案清單完整貼出來，保留 Markdown 連結格式。
+4. 結尾可以加一句貼心問候（例如：希望能幫上您的忙、如果有需要找別的再跟我說）。
+5. 直接點出重點，不要解釋搜尋過程。
+6. 注意：直接輸出一般文字對話，千萬不要使用 Markdown 的程式碼區塊（```）包裝整個回覆。
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=f"請回報搜尋結果。仁哥問：「{user_msg}」",
+                config={'system_instruction': system_instruction}
+            )
+            return response.text.strip('```markdown\n').strip('```\n').strip('```')
+        except Exception as e:
+            logger.error(f"Drive search formatting failed: {e}")
+            return f"仁哥，我找到了這些檔案，請過目：\n{files_info}"
+
     def extract_fact_to_remember(self, user_msg: str) -> dict:
         """從使用者要求記住的訊息中，萃取結構化事實"""
         prompt = f"""你是 Alice，仁哥的私人秘書。從仁哥的訊息中萃取出結構化的事實資料。

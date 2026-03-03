@@ -169,6 +169,16 @@ class ActionDispatcher:
                 else:
                     self._send_response(user_id, reply_token, "仁哥抱歉，尚未授權 Google Tasks 服務 🙇‍♀️")
 
+            elif intent == "Search_Drive":
+                # 搜尋 Google Drive
+                if self.drive_organizer and self.drive_organizer.drive:
+                    search_keyword = intent_data.get("search_keyword", user_msg)
+                    files = self.drive_organizer.drive.search_files_by_keyword(search_keyword)
+                    final_msg = self.llm.format_drive_search_results(files, user_msg)
+                    self._send_response(user_id, reply_token, final_msg)
+                else:
+                    self._send_response(user_id, reply_token, "仁哥抱歉，尚未授權 Google Drive 服務 🙇‍♀️")
+
             elif intent == "Visual_Assistant":
                 # 引導使用者傳送圖片
                 msg = "📸 好的，仁哥！\n您可以現在傳送「名片」、「會議筆記」或「活動海報」的照片給我，Alice 會立刻為您分析並自動建立聯絡人或行程叮嚀喔！😊"

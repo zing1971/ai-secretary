@@ -132,3 +132,33 @@ class DriveService:
             return result.get("name", "")
         except Exception:
             return ""
+
+    def search_files_by_keyword(self, keyword: str, max_results: int = 5) -> list:
+        """
+        根據關鍵字搜尋 Google Drive 中的檔案（包含檔名與內文）。
+
+        Args:
+            keyword: 搜尋關鍵字
+            max_results: 最多回傳幾筆結果，預設為 5
+
+        Returns:
+            list of dict: [{id, name, webViewLink, mimeType, modifiedTime}]
+        """
+        try:
+            # fullText 會搜尋檔案名稱及檔案內容文字
+            # 排除已丟垃圾桶的檔案
+            query = f"trashed = false and fullText contains '{keyword}'"
+            results = self.service.files().list(
+                q=query,
+                pageSize=max_results,
+                fields="files(id, name, webViewLink, mimeType, modifiedTime)",
+                orderBy="modifiedTime desc" # 依修改時間排序，最新的在前
+            ).execute()
+
+            files = results.get("files", [])
+            logger.info(f"🔍 Drive 搜尋 '{keyword}': 找到 {len(files)} 個檔案")
+            return files
+
+        except Exception as e:
+            logger.error(f"❌ 搜尋 Drive 檔案失敗 '{keyword}': {e}")
+            return []
