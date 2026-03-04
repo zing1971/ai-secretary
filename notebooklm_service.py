@@ -55,49 +55,58 @@ class NotebookLMService:
                 "--notebook-url", notebook_url
             ]
             
+            # 設定環境變數強制使用 UTF-8 輸出，避免 Windows CP950 編碼問題
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "utf-8"
+            
             result = subprocess.run(
                 cmd, 
+                env=env,
                 capture_output=True, 
                 text=True, 
                 encoding='utf-8', 
                 errors='ignore',
-                cwd=self.skill_dir # 切換至技能目錄執行
+                timeout=180, # 3 分鐘超時保護
+                cwd=self.skill_dir
             )
             
             if result.returncode != 0:
-                logger.error(f"❌ NotebookLM 腳本執行失敗: {result.stderr}")
+                logger.error(f"❌ NotebookLM 腳本執行失敗 (ReturnCode: {result.returncode})")
+                logger.error(f"STDOUT: {result.stdout}")
+                logger.error(f"STDERR: {result.stderr}")
                 return {"answer": "抱歉，我在查閱知識庫時遇到了一些技術問題 🙇‍♀️", "has_followup": False}
             
             stdout = result.stdout
             
-            # 解析回答。腳本通常會在結尾輸出答案。
+            # 解析回答。使用明確的標記 [RESULT_START] 與 [RESULT_END]
+            if "[RESULT_START]" in stdout and "[RESULT_END]" in stdout:
+                answer_part = stdout.split("[RESULT_START]")[1].split("[RESULT_END]")[0].strip()
+            else:
+                # 備援方案：如果沒有標記，嘗試舊的過濾邏輯
+                clean_answer = stdout.replace("EXTREMELY IMPORTANT: Is that ALL you need to know?", "").strip()
+                lines = clean_answer.split('\n')
+                final_lines = []
+                for line in lines:
+                    # 過濾各種日誌前綴與 Emoji
+                    if any(x in line for x in ["⚙️", "📚", "🚀", "Activation", "Installing", "Checking auth", "Found input", "Typing", "Submitting", "Waiting for", "🌐", "⏳", "📤", "✅", "💬", "⚠️"]):
+                        continue
+                    # 移除分隔線
+                    if line.startswith("==="):
+                        continue
+                    final_lines.append(line)
+                answer_part = "\n".join(final_lines).strip()
+            
             # 尋找是否包含追問信號
             has_followup = "EXTREMELY IMPORTANT: Is that ALL you need to know?" in stdout
             
-            # 清理輸出，只保留答案部分
-            # 技巧：ask_question.py 通常會輸出很多日誌，最後才是答案。
-            # 如果有 "ANSWER:" 標籤會更好，但根據 SKILL.md，它是直接輸出答案的。
-            # 我們假設 stdout 的最後一部分是答案。
+            # 移除追問提示（如果還在裡面）
+            answer_text = answer_part.replace("EXTREMELY IMPORTANT: Is that ALL you need to know?", "").strip()
             
-            # 移除追問提示
-            clean_answer = stdout.replace("EXTREMELY IMPORTANT: Is that ALL you need to know?", "").strip()
-            
-            # 移除終端機裝飾符號
-            lines = clean_answer.split('\n')
-            final_lines = []
-            capture = False
-            
-            # 簡單的過濾邏輯：移除載入中、環境啟動等日誌 (這裡根據實際 run.py 輸出調整)
-            # 假設前面的日誌帶有 ⚙️ 或 📚 或 🚀
-            for line in lines:
-                if any(x in line for x in ["⚙️", "📚", "🚀", "Activation", "Installing", "Checking auth"]):
-                    continue
-                final_lines.append(line)
-            
-            answer_text = "\n".join(final_lines).strip()
-            
-            if not answer_text:
-                answer_text = "抱歉，從知識庫中沒有找到相關的明確答案。"
+            if not answer_text or len(answer_text) < 10:
+                # 如果解析出的文字太短，可能解析失敗，紀錄警告並嘗試從最後幾行獲取
+                logger.warning(f"⚠️ 解析出的答案太短或為空。原始輸出長度: {len(stdout)}")
+                if not answer_text:
+                    answer_text = "抱歉，從知識庫中解析答案失敗，請聯繫管理員檢查系統日誌。"
                 
             return {"answer": answer_text, "has_followup": has_followup}
             
