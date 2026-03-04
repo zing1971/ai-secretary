@@ -46,7 +46,7 @@ class LLMService:
         self.model_id = 'gemini-2.0-flash'
 
     def generate_chat_response(self, user_msg: str, memories: str) -> str:
-        """根據使用者訊息與長期記憶生成回覆"""
+        """根據使用者訊息與長期記憶生成回覆（含防幻覺護欄）"""
         current_time = _get_current_time_str()
         
         system_instruction = f"""{ALICE_PERSONA}
@@ -64,6 +64,21 @@ class LLMService:
 - 資料來源標註：🧠 Alice / 記憶核心
 - 如果是一般問候或閒聊 → 不需要標註資料來源。
 - 不要複述仁哥的問題，直接回答。
+
+⚠️【防幻覺護欄 — 嚴格遵守】
+- 你只是行政秘書，不是專業顧問、搜尋引擎或百科全書。
+- 如果仁哥問的問題涉及「資安、IT、法規、技術架構、政策、合規」等專業知識
+  → 絕對不能用你自身的知識回答！
+  → 應引導仁哥使用專業查詢，回覆範例：
+  「仁哥，這個問題建議讓 Alice 幫您查一下知識庫，會更準確喔！請說『查知識庫 OOO』😊」
+- 如果仁哥問的是即時資訊（天氣、股價、新聞、賽事）
+  → 同樣不能猜測，應引導：
+  「仁哥，這個需要查最新資訊，讓 Alice 幫您上網搜尋好嗎？請說『上網查 OOO』🌐」
+- 只有以下情況才能直接回答：
+  ① 問候閒聊（早安、謝謝、你好）
+  ② 記憶中確實有記錄的事情
+  ③ Alice 自身能力相關的問題（你會什麼、怎麼用你）
+  ④ 日常生活常識（不涉及專業或即時性的問題）
 """
         try:
             response = self.client.models.generate_content(
@@ -467,15 +482,17 @@ class LLMService:
             return {"actions": [], "summary": f"分析時發生錯誤：{str(e)}"}
 
     def format_email_summary(self, emails: list, user_msg: str, memories: str = "", search_keyword: str = "") -> str:
-        """過濾並摘要重點信件"""
+        """過濾並摘要重點信件（含 URL 引用）"""
         if not emails:
             return "仁哥，為您搜尋後目前沒有符合的相關信件。"
             
-        # 組合信件資料
+        # 組合信件資料（含 URL）
         emails_str_list = []
         for i, email in enumerate(emails):
-            snippet = email.get('body', email.get('snippet', '無內容'))[:300] # 只取前300字給LLM判斷
-            emails_str_list.append(f"[信件 {i+1}] 寄件人: {email['sender']} | 主旨: {email['subject']}\n內容開頭: {snippet}")
+            snippet = email.get('body', email.get('snippet', '無內容'))[:300]
+            url = email.get('url', '')
+            url_info = f" | URL: {url}" if url else ""
+            emails_str_list.append(f"[信件 {i+1}] 寄件人: {email['sender']} | 主旨: {email['subject']}{url_info}\n內容開頭: {snippet}")
         
         emails_str = "\n".join(emails_str_list)
         keyword_context = f"【搜尋目標】{search_keyword}\n" if search_keyword else ""
@@ -494,9 +511,10 @@ class LLMService:
 1. 過濾掉明顯的廣告信、通知信或是無關緊要的系統信（除非這些信件符合仁哥指定的搜尋關鍵字）。
 2. 只列出「重要」、「需要處理/回覆」或「與仁哥詢問意圖高度相關」的信件（最好控制在 3~5 封內）。
 3. 針對挑出的每一封信件，列出：寄件人、重點摘要。
-4. 如果沒有找到任何重要信件，請回報「目前信箱很乾淨喔」或「沒有找到相關信件」。
-5. 最後給予一句秘書的貼心建議。
-6. **必須在結尾加上資料來源標註**：
+4. 如果信件資料中有 URL，在每封重要信件摘要後附上「🔗 查看原信：URL」（最多附 3 封）。
+5. 如果沒有找到任何重要信件，請回報「目前信箱很乾淨喔」或「沒有找到相關信件」。
+6. 最後給予一句秘書的貼心建議。
+7. **必須在結尾加上資料來源標註**：
    ══════════════
    📍 資料來源：📧 Gmail / 電子郵件
 
@@ -592,14 +610,19 @@ class LLMService:
             logger.error(f"Gemini image analysis failed: {e}")
             return "仁哥抱歉，Alice 的「眼睛」出了一點小狀況，現在無法看清楚這張圖片 🙇‍♀️"
 
-    def format_domain_advisor_reply(self, query: str, domain: str, notebooklm_answer: str) -> str:
-        """根據領域 (資安/IT/趨勢) 與知識庫答案，生成 Alice 分秒必爭的專業顧問報告"""
+    def format_domain_advisor_reply(self, query: str, domain: str, notebooklm_answer: str, source_url: str = "") -> str:
+        """根據領域 (資安/IT/趨勢) 與知識庫答案，生成 Alice 的專業顧問報告"""
         domain_labels = {
             "infosec": "資通安全",
             "it": "資訊科技",
             "trends": "國際趨勢"
         }
         domain_label = domain_labels.get(domain, "專業領域")
+        
+        # 組合來源標註（含 URL）
+        source_section = "══════════════\n📍 資料來源：📚 NotebookLM / 專案知識庫"
+        if source_url:
+            source_section += f"\n🔗 開啟知識庫：{source_url}"
         
         system_instruction = f"""{ALICE_PERSONA}
 
@@ -619,9 +642,8 @@ class LLMService:
    - 列點說明重要細節（最多 3-4 點，條理分明）。
    - 【加入追問建議】：根據原始資料判斷還有哪方面可以深挖，在結尾加上如「您想進一步了解 OOO 的細節嗎？」。
 4. 【資料忠實度】：絕不能捏造知識庫中未提及的數據。
-5. **必須在結尾加上資料來源標註**：
-   ══════════════
-   📍 資料來源：📚 NotebookLM / 專案知識庫
+5. **必須在結尾加上以下資料來源標註（原封不動）**：
+   {source_section}
 
 請直接輸出 LINE 訊息內容。
 """

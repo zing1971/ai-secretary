@@ -49,6 +49,7 @@ def get_recent_emails(service, query=None, max_results=15):
             
             email_list.append({
                 'id': msg['id'],
+                'url': f"https://mail.google.com/mail/u/0/#inbox/{msg['id']}",
                 'threadId': msg_data.get('threadId'),
                 'sender': sender,
                 'subject': subject,

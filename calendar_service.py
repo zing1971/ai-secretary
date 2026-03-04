@@ -41,10 +41,12 @@ def get_events(service, time_min: str, time_max: str, query: str = None):
         summary = event.get('summary', '無標題')
         location = event.get('location', '')
         description = event.get('description', '')
+        html_link = event.get('htmlLink', '')
         
         # 組合資訊
         loc_str = f" | 地點: {location}" if location and location != '無地點' else ""
         desc_str = f" | 備註: {description[:50]}..." if description else ""
+        link_str = f"\n  🔗 查看行程：{html_link}" if html_link else ""
         
         # 若是全天行程
         if ' ' in start_fmt:
@@ -52,7 +54,7 @@ def get_events(service, time_min: str, time_max: str, query: str = None):
         else:
             time_display = f"{start_fmt} (全天)"
             
-        processed_events.append(f"• [{time_display}] {summary}{loc_str}{desc_str}")
+        processed_events.append(f"• [{time_display}] {summary}{loc_str}{desc_str}{link_str}")
         
     return processed_events
 

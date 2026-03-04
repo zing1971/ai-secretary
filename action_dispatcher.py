@@ -1,4 +1,5 @@
 import datetime
+import time
 import pytz
 from calendar_service import get_todays_events, get_events
 from gmail_service import get_recent_emails, create_gmail_draft
@@ -43,9 +44,26 @@ class ActionDispatcher:
             self.drive_organizer = None
             logger.warning("⚠️ Drive 服務未就緒，整理功能停用")
 
+        # 澄清意圖暫存（使用者選擇前保存原始查詢）
+        self._pending_clarification = {}
+
     # 確認/取消動作的關鍵字（規則式判斷，不依賴 LLM）
     CONFIRM_KEYWORDS = {"好", "好的", "可以", "執行", "同意", "沒問題", "ok", "OK", "去做吧", "做吧", "對", "是", "嗯"}
     CANCEL_KEYWORDS = {"不要", "不用", "取消", "算了", "停", "不", "別", "放棄"}
+
+    # 澄清選項對照表
+    INTENT_MENU = {
+        1: "Query_Project_Advisor",
+        2: "Query_Email",
+        3: "Search_Drive",
+        4: "Search_Web",
+    }
+    INTENT_LABELS = {
+        "Query_Project_Advisor": ("📚", "知識庫（內部專業文件）"),
+        "Query_Email":           ("📧", "電子郵件"),
+        "Search_Drive":          ("☁️", "雲端硬碟檔案"),
+        "Search_Web":            ("🌐", "網際網路即時搜尋"),
+    }
 
     def dispatch(self, intent_data, user_msg: str, user_id: str, reply_token: str = None):
         """根據意圖分流行動"""
@@ -57,6 +75,12 @@ class ActionDispatcher:
             time_range = intent_data.get("time_range", {"start_offset": 0, "end_offset": 0, "label": "今天"})
             
         logger.info(f"分派意圖: {intent} | 時間標籤: {time_range.get('label')}")
+
+        # ⚡ 規則式前置：數字快捷選擇攔截（用於澄清流程回覆）
+        if user_msg.strip() in ["1", "2", "3", "4"]:
+            choice = int(user_msg.strip())
+            if self._handle_clarification_choice(user_id, reply_token, choice):
+                return
 
         # 🔑 規則式前置判斷：有待確認提案時，短回覆直接攔截
         if self.drive_organizer and self.drive_organizer.has_pending_proposal(user_id):
@@ -179,8 +203,16 @@ class ActionDispatcher:
                 if self.drive_organizer and self.drive_organizer.drive:
                     search_keyword = intent_data.get("search_keyword", user_msg)
                     files = self.drive_organizer.drive.search_files_by_keyword(search_keyword)
-                    final_msg = self.llm.format_drive_search_results(files, user_msg)
-                    self._send_response(user_id, reply_token, final_msg)
+                    if files:
+                        final_msg = self.llm.format_drive_search_results(files, user_msg)
+                        self._send_response(user_id, reply_token, final_msg)
+                    else:
+                        self._send_response(user_id, reply_token,
+                            f"仁哥，雲端硬碟中沒有找到與「{search_keyword}」相關的檔案 📭\n\n"
+                            "要不要 Alice 幫您換個方向查查看？\n"
+                            "📚 回覆「查知識庫」→ 搜尋內部專業文件\n"
+                            "📧 回覆「查信件」→ 搜尋電子郵件\n"
+                            "🌐 回覆「上網查」→ 網際網路搜尋")
                 else:
                     self._send_response(user_id, reply_token, "仁哥抱歉，尚未授權 Google Drive 服務 🙇‍♀️")
 
@@ -219,7 +251,14 @@ class ActionDispatcher:
                         summary_msg = self.llm.format_email_summary(emails, user_msg, memories, search_keyword)
                         self._send_response(user_id, reply_token, summary_msg)
                 else:
-                    self._send_response(user_id, reply_token, "仁哥，為您搜尋後目前沒有符合的相關信件。")
+                    search_keyword = intent_data.get("search_keyword", "")
+                    kw_display = f"與「{search_keyword}」相關的" if search_keyword else "符合的相關"
+                    self._send_response(user_id, reply_token,
+                        f"仁哥，信箱中沒有找到{kw_display}信件 📭\n\n"
+                        "要不要 Alice 幫您換個方向查查看？\n"
+                        "📚 回覆「查知識庫」→ 搜尋內部專業文件\n"
+                        "☁️ 回覆「找檔案」→ 搜尋雲端硬碟\n"
+                        "🌐 回覆「上網查」→ 網際網路搜尋")
             
             elif intent == "Query_Project_Advisor":
                 domain = intent_data.get("domain", "it")
@@ -250,6 +289,9 @@ class ActionDispatcher:
                 )
                 thread.start()
 
+            elif intent == "Clarify_Intent":
+                self._handle_clarify(intent_data, user_msg, user_id, reply_token)
+
         except Exception as e:
             logger.error(f"處理分派時異常: {e}")
             self._send_response(user_id, reply_token, f"仁哥抱歉，Alice 處理時遇到了問題：{str(e)} 🙇‍♀️")
@@ -269,22 +311,115 @@ class ActionDispatcher:
             self.line.push_text(f"報告仁哥，剛才在網路搜尋「{query}」時，技術上突然卡住了... 🙇‍♀️", to_user_id=user_id)
 
     def _async_notebooklm_query(self, user_id: str, query: str, domain: str):
-        """非同步執行 NotebookLM 查詢並推送結果"""
+        """非同步執行 NotebookLM 查詢並推送結果（含降級機制）"""
         try:
             # 1. 向 NotebookLM 專家查詢
             result = self.notebooklm.query_advisor(query, domain)
             raw_answer = result.get("answer", "")
+            source_url = result.get("source_url", "")
             
-            # 2. 透過 LLM 轉化為 Alice 的口吻報告
-            formatted_report = self.llm.format_domain_advisor_reply(query, domain, raw_answer)
+            # 2. 降級判斷：知識庫回答不足
+            if not raw_answer or len(raw_answer) < 20 or "抱歉" in raw_answer[:20]:
+                logger.warning(f"⚠️ NotebookLM 回答不足 (長度:{len(raw_answer)})，降級為網路搜尋")
+                self._fallback_web_search(user_id, query, "知識庫目前暫時無法提供完整回答")
+                return
             
-            # 3. 透過 LINE Push 推送結果
+            # 3. 透過 LLM 轉化為 Alice 的口吻報告
+            formatted_report = self.llm.format_domain_advisor_reply(query, domain, raw_answer, source_url)
+            
+            # 4. 透過 LINE Push 推送結果
             self.line.push_text(formatted_report, to_user_id=user_id)
             
-            logger.info(f"✅ NotebookLM 查詢任務完成 (錄入用戶: {user_id})")
+            logger.info(f"✅ NotebookLM 查詢任務完成 (用戶: {user_id})")
         except Exception as e:
             logger.error(f"❌ _async_notebooklm_query 執行失敗: {e}")
-            self.line.push_text(f"報告仁哥，剛才在查閱「{domain}」知識庫時，技術上突然卡住了... 🙇‍♀️", to_user_id=user_id)
+            # 降級為網路搜尋
+            self._fallback_web_search(user_id, query, f"知識庫查詢異常")
+
+    def _fallback_web_search(self, user_id: str, query: str, reason: str):
+        """當知識庫失敗時，降級為網路搜尋"""
+        try:
+            logger.info(f"🔄 啟動降級搜尋: {reason}")
+            fallback = self.llm.perform_web_search(query)
+            self.line.push_text(
+                f"{fallback}\n\n"
+                f"⚠️ 注意：{reason}，以上為 Alice 從網路搜尋到的資訊。",
+                to_user_id=user_id)
+        except Exception as fallback_err:
+            logger.error(f"❌ 降級搜尋也失敗: {fallback_err}")
+            self.line.push_text(
+                f"仁哥抱歉，知識庫和網路搜尋目前都暫時出了狀況 🙇‍♀️\n"
+                f"請稍後再試一次。",
+                to_user_id=user_id)
+
+    def _handle_clarify(self, intent_data, user_msg, user_id, reply_token):
+        """處理 Clarify_Intent：暫存原始查詢並傳送選項給使用者"""
+        candidates = intent_data.get("candidates", [])
+        
+        # 暫存原始查詢
+        self._pending_clarification[user_id] = {
+            "original_query": user_msg,
+            "original_intent_data": intent_data,
+            "candidates": candidates,
+            "timestamp": time.time()
+        }
+        
+        # 組合選項訊息
+        options = []
+        for num, intent_key in self.INTENT_MENU.items():
+            emoji, label = self.INTENT_LABELS.get(intent_key, ("❓", "其他"))
+            options.append(f"{num}️⃣ {emoji} {label}")
+        
+        ambiguity = intent_data.get("ambiguity_reason", "")
+        reason_text = f"\n（{ambiguity}）" if ambiguity else ""
+        
+        msg = (
+            f"仁哥，關於「{user_msg}」，{reason_text}\n"
+            f"請問您想從哪裡查詢呢？😊\n\n"
+            + "\n".join(options) +
+            "\n\n直接回覆數字就好 ✨"
+        )
+        self._send_response(user_id, reply_token, msg)
+
+    def _handle_clarification_choice(self, user_id, reply_token, choice):
+        """處理使用者的數字選擇。返回 True 表示已處理，False 表示非澄清流程。"""
+        pending = self._pending_clarification.get(user_id)
+        
+        # 找不到暫存 → 不攔截，讓正常流程處理
+        if not pending:
+            return False
+        
+        # 過期檢查（5 分鐘）
+        if time.time() - pending["timestamp"] > 300:
+            del self._pending_clarification[user_id]
+            self._send_response(user_id, reply_token,
+                "仁哥，這個查詢已經超過 5 分鐘了 ⏰\n"
+                "麻煩您重新提問一次好嗎？")
+            return True
+        
+        target_intent = self.INTENT_MENU.get(choice)
+        if not target_intent:
+            return False
+        
+        original_query = pending["original_query"]
+        original_data = pending.get("original_intent_data", {})
+        del self._pending_clarification[user_id]  # 清除暫存
+        
+        # 統一雙訊息模式：reply 確認 → push 結果
+        emoji, label = self.INTENT_LABELS.get(target_intent, ("", ""))
+        self._send_response(user_id, reply_token,
+            f"✅ 收到！Alice 正在從「{label}」查詢「{original_query}」... ⏳")
+        
+        # 重組 intent_data 並轉發（reply_token 設為 None，後續結果走 push）
+        original_data["intent"] = target_intent
+        original_data["search_keyword"] = original_data.get("search_keyword", original_query)
+        # 如果選的是知識庫，需要 domain
+        if target_intent == "Query_Project_Advisor" and not original_data.get("domain"):
+            original_data["domain"] = "it"  # 預設 IT
+        
+        logger.info(f"🔄 澄清轉發: {target_intent} | 查詢: {original_query}")
+        self.dispatch(original_data, original_query, user_id, reply_token=None)
+        return True
 
     def _send_response(self, user_id, reply_token, text):
         """核心回覆邏輯：優先使用 reply_token，失敗則使用 push_text"""

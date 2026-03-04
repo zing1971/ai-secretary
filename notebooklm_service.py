@@ -108,7 +108,7 @@ class NotebookLMService:
                 if not answer_text:
                     answer_text = "抱歉，從知識庫中解析答案失敗，請聯繫管理員檢查系統日誌。"
                 
-            return {"answer": answer_text, "has_followup": has_followup}
+            return {"answer": answer_text, "has_followup": has_followup, "source_url": notebook_url}
             
         except Exception as e:
             logger.error(f"❌ query_advisor 發生例外: {e}")
