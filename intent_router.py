@@ -73,6 +73,9 @@ class IntentRouter:
 
         if len(hits) == 1:
             intent = list(hits.keys())[0]
+            # 特殊規則：Draft_Email 需要 LLM 解析指令上下文，不直接用規則層
+            if intent == "Draft_Email":
+                return None
             return {"intent": intent, "search_keyword": msg}
 
         if len(hits) == 0:
@@ -122,11 +125,17 @@ class IntentRouter:
    - 觸發條件：問題含有時間成份（明天、下週、幾號、幾點）且與行程相關。
    - 必須精確計算並輸出 `time_range` (start_offset, end_offset, label)。
 
-3. "Query_Email" — 查詢或擬寫電子郵件。
-   - 觸發條件：問題明確涉及「信件、郵件、收件、寄件人、回信、擬稿」。
-   - 可輸出 `search_keyword` 與 `time_range`。
+3. "Query_Email" — 查詢或整理電子郵件。
+   - 觸發條件：純查詢或整理信件，沒有要求「回信、擬稿」。
+   - 例如：「幫我找OO的信」、「摘要最新信件」。
+   - 輸出 `search_keyword` 與 `time_range`。
 
-4. "Search_Drive" — 搜尋雲端硬碟檔案。
+4. "Draft_Email" — 擬寫回信或草稿。
+   - 觸發條件：明確要求「回信、擬寫、草擬回信、答覆」。
+   - 例如：「幫我回信給OO說明天會到」、「檢查信件並幫我草擬回覆」。
+   - 輸出 `search_keyword`（找哪封信來回）與 `draft_instruction`（回覆的具體指示）。
+
+5. "Search_Drive" — 搜尋雲端硬碟檔案。
    - 觸發條件：問題明確涉及「檔案、文件、簡報、資料夾、雲端」。
    - 必須輸出 `search_keyword`。
 
@@ -159,6 +168,7 @@ class IntentRouter:
   "ambiguity_reason": "歧義原因（無歧義時填 null）",
   "domain": "infosec/it/trends（僅 Query_Project_Advisor 時）",
   "search_keyword": "搜尋關鍵字",
+  "draft_instruction": "擬寫信件的具體指示(無則填null)",
   "time_range": {{"start_offset": 0, "end_offset": 0, "label": "今天"}}
 }}
 """

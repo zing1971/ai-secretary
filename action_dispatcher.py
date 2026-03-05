@@ -46,6 +46,8 @@ class ActionDispatcher:
 
         # 澄清意圖暫存（使用者選擇前保存原始查詢）
         self._pending_clarification = {}
+        # 信件查詢上下文暫存（用於草擬回信時缺乏關鍵字時的推斷）
+        self._user_email_context = {}
 
     # 確認/取消動作的關鍵字（規則式判斷，不依賴 LLM）
     CONFIRM_KEYWORDS = {"好", "好的", "可以", "執行", "同意", "沒問題", "ok", "OK", "去做吧", "做吧", "對", "是", "嗯"}
@@ -223,35 +225,18 @@ class ActionDispatcher:
 
             elif intent == "Query_Email":
                 search_keyword = intent_data.get("search_keyword", "")
+                
+                # 紀錄上下文，方便後續擬稿時參考
+                self._user_email_context[user_id] = search_keyword
+                
                 emails = get_recent_emails(self.gmail, query=search_keyword)
                 
                 if emails:
-                    # 簡單判別是否為擬稿指令
-                    draft_keywords = ["回信", "回覆", "擬稿", "草擬", "草稿", "答覆", "寫信"]
-                    is_drafting = any(kw in user_msg for kw in draft_keywords)
                     memories = self.memory.fetch_relevant_memories(user_msg)
-                    
-                    if is_drafting:
-                        # 挑選第一封信（假設為最相關）進行草稿生成
-                        target_email = emails[0]
-                        draft_body = self.llm.generate_email_draft_reply(target_email, user_msg, memories)
-                        
-                        # 呼叫 Gmail API 建立草稿
-                        create_gmail_draft(
-                            self.gmail,
-                            to_email=target_email['sender'],
-                            subject=f"Re: {target_email['subject']}",
-                            body_text=draft_body,
-                            thread_id=target_email.get('threadId')
-                        )
-                        
-                        self._send_response(user_id, reply_token, f"✅ 仁哥，已經幫您在 Gmail 草擬好回信給「{target_email['sender']}」了！\n\n草稿內容如下：\n{draft_body}")
-                    else:
-                        # 摘要分析信件
-                        summary_msg = self.llm.format_email_summary(emails, user_msg, memories, search_keyword)
-                        self._send_response(user_id, reply_token, summary_msg)
+                    # 摘要分析信件
+                    summary_msg = self.llm.format_email_summary(emails, user_msg, memories, search_keyword)
+                    self._send_response(user_id, reply_token, summary_msg)
                 else:
-                    search_keyword = intent_data.get("search_keyword", "")
                     kw_display = f"與「{search_keyword}」相關的" if search_keyword else "符合的相關"
                     self._send_response(user_id, reply_token,
                         f"仁哥，信箱中沒有找到{kw_display}信件 📭\n\n"
@@ -259,6 +244,34 @@ class ActionDispatcher:
                         "📚 回覆「查知識庫」→ 搜尋內部專業文件\n"
                         "☁️ 回覆「找檔案」→ 搜尋雲端硬碟\n"
                         "🌐 回覆「上網查」→ 網際網路搜尋")
+            
+            elif intent == "Draft_Email":
+                # 若無搜尋關鍵字，嘗試擷取上一次 Query_Email 的上下文
+                search_keyword = intent_data.get("search_keyword", "")
+                if not search_keyword and user_id in self._user_email_context:
+                    search_keyword = self._user_email_context[user_id]
+
+                draft_instruction = intent_data.get("draft_instruction", user_msg)
+                emails = get_recent_emails(self.gmail, query=search_keyword)
+                
+                if emails:
+                    memories = self.memory.fetch_relevant_memories(user_msg)
+                    # 挑選第一封信（假設為最相關）進行草稿生成
+                    target_email = emails[0]
+                    draft_body = self.llm.generate_email_draft_reply(target_email, draft_instruction, memories)
+                    
+                    # 呼叫 Gmail API 建立草稿
+                    create_gmail_draft(
+                        self.gmail,
+                        to_email=target_email['sender'],
+                        subject=f"Re: {target_email['subject']}",
+                        body_text=draft_body,
+                        thread_id=target_email.get('threadId')
+                    )
+                    
+                    self._send_response(user_id, reply_token, f"✅ 仁哥，已經幫您在 Gmail 草擬好回信給「{target_email['sender']}」了！\n\n草稿內容如下：\n{draft_body}")
+                else:
+                    self._send_response(user_id, reply_token, f"仁哥，我找不到相關的信件來回覆 📭，請告訴我要回信給誰或主旨是什麼。")
             
             elif intent == "Query_Project_Advisor":
                 domain = intent_data.get("domain", "it")

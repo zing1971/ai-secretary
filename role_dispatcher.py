@@ -86,6 +86,9 @@ class RoleDispatcher:
         # 保留對 drive_organizer 的引用（app.py 需要）
         self.drive_organizer = drive_organizer
 
+        # ===== 跨輪次對話上下文暫存 =====
+        self._user_email_context = {}
+
         # ===== 跨角色協作：Alice → Birdie 轉交回呼 =====
         self.alice.set_handoff(self._handoff_to_birdie)
 
@@ -121,6 +124,16 @@ class RoleDispatcher:
             intent = override_intent
             if isinstance(intent_data, dict):
                 intent_data["intent"] = override_intent
+
+        # ===== 跨輪對話上下文機制 =====
+        if intent == "Query_Email":
+            if isinstance(intent_data, dict):
+                self._user_email_context[user_id] = intent_data.get("search_keyword", "")
+        elif intent == "Draft_Email":
+            if isinstance(intent_data, dict) and not intent_data.get("search_keyword"):
+                intent_data["search_keyword"] = self._user_email_context.get(user_id, "")
+                # 將原始訊息視為草擬指示
+                intent_data["draft_instruction"] = intent_data.get("draft_instruction", user_msg)
 
         # ===== 歧義處理 =====
         if intent == "Clarify_Intent":
