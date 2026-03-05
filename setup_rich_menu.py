@@ -53,7 +53,7 @@ def create_and_link_rich_menu(user_id, image_path="rich_menu_v3_dual_role.jpg"):
             # [Alice] 行程查詢
             {
                 "bounds": {"x": 0, "y": 0, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "查詢我未來2天的行程安排，提醒需要準備的事項"}
+                "action": {"type": "message", "text": "查詢我未來2天的工作安排，提醒需要準備的事項"}
             },
             # [Alice] 信件查詢
             {
@@ -63,7 +63,7 @@ def create_and_link_rich_menu(user_id, image_path="rich_menu_v3_dual_role.jpg"):
             # [Birdie] 今日簡報
             {
                 "bounds": {"x": CW * 2, "y": 0, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "今日簡報"}
+                "action": {"type": "message", "text": "今天摘要"}
             },
             # [Birdie] 智慧擬稿
             {
@@ -90,7 +90,7 @@ def create_and_link_rich_menu(user_id, image_path="rich_menu_v3_dual_role.jpg"):
             # [Birdie] 視覺處理
             {
                 "bounds": {"x": CW * 3, "y": CH, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "我要傳照片給你辨識，請準備接收名片、海報或會議筆記"}
+                "action": {"type": "message", "text": "我要傳照片給你辨識處理"}
             },
 
             # ===== Row 2 =====
@@ -112,7 +112,7 @@ def create_and_link_rich_menu(user_id, image_path="rich_menu_v3_dual_role.jpg"):
             # [共用] 與我閒聊
             {
                 "bounds": {"x": CW * 3, "y": CH * 2, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "你們好，簡要說明你們各自能提供的服務項目"}
+                "action": {"type": "message", "text": "你好，簡要說明你們各自能提供的服務項目"}
             },
         ]
     }

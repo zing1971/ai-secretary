@@ -18,7 +18,7 @@ class IntentRouter:
         "Search_Drive":     ["檔案", "文件", "簡報", "drive", "雲端硬碟", "資料夾", "找檔"],
         "Memory_Update":    ["記住", "記下", "筆記", "存入記憶", "幫我記"],
         "Organize_Drive":   ["整理雲端", "整理硬碟", "整理 drive", "整理Drive"],
-        "Proactive_Process": ["今日簡報", "每日簡報", "今天摘要", "日報"],
+        "Proactive_Process": ["今日簡報", "今日簡報摘要", "每日簡報", "今天摘要", "日報"],
         "Search_Web":        ["上網搜尋", "上網查", "搜尋新聞", "查新聞"],
         "Query_Tasks":       ["待辦", "todo", "任務清單", "待辦事項"],
     }
