@@ -52,7 +52,7 @@ async def _initialize_all_services(app):
         from google_auth import get_google_services
         from llm_service import LLMService
         from intent_router import IntentRouter
-        from action_dispatcher import ActionDispatcher
+        from role_dispatcher import RoleDispatcher
 
         Config.validate()
 
@@ -67,11 +67,11 @@ async def _initialize_all_services(app):
         gmail, calendar, tasks, sheets, drive, people = get_google_services()
         logger.info("✅ Google 服務就緒")
 
-        S.dispatcher = ActionDispatcher(
+        S.dispatcher = RoleDispatcher(
             S.line_service, S.llm_service,
             gmail, calendar, tasks, sheets, drive, people
         )
-        logger.info("✅ Dispatcher 就緒")
+        logger.info("✅ 雙角色分流器就緒（Alice + Birdie）")
 
         S.ready = True
         logger.info("🎉 AI 秘書完全上線！")

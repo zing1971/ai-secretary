@@ -1,0 +1,244 @@
+"""
+Birdie — ⚙️ 執行管家 動作處理器
+
+負責所有「有副作用」的工作執行動作：
+- Organize_Drive: 整理雲端硬碟
+- Confirm_Action / Cancel_Action: 確認或取消待處理操作
+- Proactive_Process: 每日簡報（建立待辦、擬寫草稿）
+- Memory_Update: 記憶管理
+- 圖片處理: 分析圖片並建立聯絡人/任務
+"""
+import datetime
+import pytz
+import logging
+
+from shared.line_responder import send_response
+from shared.clarify_handler import CONFIRM_KEYWORDS, CANCEL_KEYWORDS
+
+logger = logging.getLogger(__name__)
+
+
+class BirdieActionHandler:
+    """Birdie 的執行分派核心：所有執行類意圖在此處理"""
+
+    # Birdie 負責的意圖清單
+    HANDLED_INTENTS = {
+        "Organize_Drive", "Confirm_Action", "Cancel_Action",
+        "Proactive_Process", "Memory_Update",
+    }
+
+    def __init__(self, line_service, llm_service, gmail, calendar, tasks, sheets,
+                 memory_service, drive_organizer=None, people=None):
+        self.line = line_service
+        self.llm = llm_service
+        self.gmail = gmail
+        self.calendar = calendar
+        self.tasks = tasks
+        self.sheets = sheets
+        self.memory = memory_service
+        self.drive_organizer = drive_organizer
+        self.people = people
+
+    def can_handle(self, intent: str) -> bool:
+        return intent in self.HANDLED_INTENTS
+
+    def has_pending_confirmation(self, user_id: str) -> bool:
+        """檢查 Birdie 是否有待確認提案"""
+        return self.drive_organizer and self.drive_organizer.has_pending_proposal(user_id)
+
+    def try_intercept_confirm_cancel(self, user_msg, user_id, reply_token):
+        """
+        規則式攔截：有待確認提案時，短回覆直接判定確認/取消。
+        返回攔截後的意圖字串或 None。
+        """
+        if not self.has_pending_confirmation(user_id):
+            return None
+        msg_clean = user_msg.strip()
+        if msg_clean in CONFIRM_KEYWORDS:
+            logger.info("🔑 Birdie 攔截 → Confirm_Action (有待確認提案)")
+            return "Confirm_Action"
+        elif msg_clean in CANCEL_KEYWORDS:
+            logger.info("🔑 Birdie 攔截 → Cancel_Action (有待確認提案)")
+            return "Cancel_Action"
+        return None
+
+    def dispatch(self, intent_data, user_msg: str, user_id: str, reply_token: str = None):
+        """根據意圖分派執行動作"""
+        if isinstance(intent_data, str):
+            intent = intent_data
+        else:
+            intent = intent_data.get("intent", "")
+
+        logger.info(f"⚙️ Birdie 處理執行: {intent}")
+
+        try:
+            if intent == "Memory_Update":
+                self._handle_memory_update(user_msg, user_id, reply_token)
+
+            elif intent == "Organize_Drive":
+                self._handle_organize_drive(user_id, reply_token)
+
+            elif intent == "Confirm_Action":
+                self._handle_confirm(user_msg, user_id, reply_token)
+
+            elif intent == "Cancel_Action":
+                self._handle_cancel(user_msg, user_id, reply_token)
+
+            elif intent == "Proactive_Process":
+                result = self.handle_proactive_process()
+                self._send(user_id, reply_token, result)
+
+        except Exception as e:
+            logger.error(f"❌ Birdie 處理執行異常: {e}")
+            self._send(user_id, reply_token,
+                f"仁哥抱歉，Birdie 在執行時遇到了問題：{str(e)} 🙇‍♀️")
+
+    # ===== 各執行處理方法 =====
+
+    def _handle_memory_update(self, user_msg, user_id, reply_token):
+        """記憶更新"""
+        fact_data = self.llm.extract_fact_to_remember(user_msg)
+        if fact_data and fact_data.get("fact"):
+            cat_label = fact_data.get('category', '')
+            fact_text = fact_data.get('fact', '')
+            result = self.memory.save_memory(fact_data)
+
+            if result == "new":
+                self._send(user_id, reply_token,
+                    f"✅ 收到，Birdie 已經幫仁哥記下了：\n📁 分類：{cat_label}\n📝 {fact_text}")
+            elif result == "duplicate":
+                self._send(user_id, reply_token,
+                    f"仁哥，這個已經記過了喔 😊\n📝 {fact_text}")
+            elif result == "updated":
+                self._send(user_id, reply_token,
+                    f"🔄 收到，Birdie 已經幫仁哥更新記憶了：\n📁 分類：{cat_label}\n📝 {fact_text}")
+            else:
+                self._send(user_id, reply_token,
+                    "仁哥抱歉，Birdie 在存入記憶時遇到了問題，請稍後再試一次 🙇‍♀️")
+        else:
+            self._send(user_id, reply_token,
+                "仁哥，Birdie 沒有從訊息中找到需要記住的內容，可以再說一次嗎？😊")
+
+    def _handle_organize_drive(self, user_id, reply_token):
+        """整理雲端硬碟"""
+        if not self.drive_organizer:
+            self._send(user_id, reply_token, "仁哥抱歉，Drive 服務尚未就緒 🙇‍♀️")
+            return
+        self._send(user_id, reply_token, "📂 收到！Birdie 正在掃描雲端硬碟，請稍候... ⏳")
+        result = self.drive_organizer.scan_and_propose(user_id)
+        self.line.push_text(result, to_user_id=user_id)
+
+    def _handle_confirm(self, user_msg, user_id, reply_token):
+        """確認執行"""
+        if self.drive_organizer and self.drive_organizer.has_pending_proposal(user_id):
+            self._send(user_id, reply_token, "🚀 收到！Birdie 正在執行整理，請稍候... ⏳")
+            result = self.drive_organizer.confirm_and_execute(user_id)
+            self.line.push_text(result, to_user_id=user_id)
+        else:
+            # 沒有待確認提案 → 當作閒聊
+            memories = self.memory.fetch_relevant_memories(user_msg)
+            response = self.llm.generate_chat_response(user_msg, memories)
+            self._send(user_id, reply_token, response)
+
+    def _handle_cancel(self, user_msg, user_id, reply_token):
+        """取消操作"""
+        if self.drive_organizer and self.drive_organizer.has_pending_proposal(user_id):
+            result = self.drive_organizer.cancel_proposal(user_id)
+            self._send(user_id, reply_token, result)
+        else:
+            memories = self.memory.fetch_relevant_memories(user_msg)
+            response = self.llm.generate_chat_response(user_msg, memories)
+            self._send(user_id, reply_token, response)
+
+    def handle_proactive_process(self) -> str:
+        """執行主動處理邏輯並回傳報告字串"""
+        if not all([self.gmail, self.calendar, self.tasks]):
+            return "仁哥抱歉，Google 服務授權不完整，Birdie 暫時無法處理主動任務 🙇‍♀️"
+
+        try:
+            from calendar_service import get_events
+            from gmail_service import get_recent_emails, create_gmail_draft
+            from tasks_service import create_google_task
+
+            tz = pytz.timezone('Asia/Taipei')
+            now = datetime.datetime.now(tz)
+            start_utc = now.replace(hour=0, minute=0, second=0).astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
+            end_utc = (now + datetime.timedelta(days=1)).replace(hour=23, minute=59, second=59).astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
+
+            events = get_events(self.calendar, start_utc, end_utc)
+            emails = get_recent_emails(self.gmail)
+
+            action_data = self.llm.analyze_for_actions(events, emails)
+
+            tasks_created = 0
+            for t in action_data.get('tasks', []):
+                create_google_task(self.tasks, t.get('title'), t.get('notes'), t.get('due'))
+                tasks_created += 1
+
+            drafts_created = 0
+            for d in action_data.get('drafts', []):
+                create_gmail_draft(self.gmail, d.get('to'), d.get('subject'), d.get('body'), d.get('threadId'))
+                drafts_created += 1
+
+            briefing = action_data.get('briefing', '已為您處理完畢。')
+            return (f"📋 Birdie 處理報告\n{briefing}\n\n"
+                    f"已幫仁哥建立 {tasks_created} 項待辦任務、{drafts_created} 封回覆草稿 ✅")
+
+        except Exception as e:
+            logger.error(f"Birdie 主動處理失敗: {e}")
+            return f"仁哥抱歉，Birdie 在處理時遇到了問題：{str(e)} 🙇‍♀️"
+
+    def dispatch_image(self, image_bytes: bytes, user_id: str, reply_token: str):
+        """處理收到的圖片訊息"""
+        logger.info("⚙️ Birdie 分派圖片處理")
+        self._send(user_id, reply_token,
+            "📸 收到圖片！Birdie 正在幫您分析並處理成結構化資料中，請稍候... ⏳")
+        try:
+            from tasks_service import create_google_task
+            from contacts_service import create_contact
+
+            analysis_data = self.llm.analyze_image_for_actions(image_bytes)
+
+            if isinstance(analysis_data, str):
+                self.line.push_text(analysis_data, to_user_id=user_id)
+                return
+
+            tasks_created = 0
+            contacts_created = 0
+
+            for t in analysis_data.get('tasks', []):
+                if self.tasks:
+                    create_google_task(self.tasks, t.get('title'), t.get('notes'), t.get('due'))
+                    tasks_created += 1
+
+            for c in analysis_data.get('contacts', []):
+                if self.people:
+                    create_contact(
+                        self.people,
+                        name=c.get('name', ''),
+                        company=c.get('company', ''),
+                        job_title=c.get('job_title', ''),
+                        email=c.get('email', ''),
+                        phone=c.get('phone', ''),
+                        photo_bytes=image_bytes
+                    )
+                    contacts_created += 1
+
+            briefing = analysis_data.get('briefing', '已為您處理圖片完畢。')
+
+            summary_parts = []
+            if tasks_created > 0:
+                summary_parts.append(f"✅ 自動建立了 {tasks_created} 項 Google 待辦任務")
+            if contacts_created > 0:
+                summary_parts.append(f"📇 自動建立了 {contacts_created} 筆 Google 聯絡人")
+            if summary_parts:
+                briefing += "\n\n" + "\n".join(summary_parts)
+
+            self.line.push_text(briefing, to_user_id=user_id)
+        except Exception as e:
+            logger.error(f"❌ Birdie 圖片處理失敗: {e}", exc_info=True)
+            self.line.push_text("仁哥抱歉，Birdie 在處理這張圖片時遇到了問題 🙇‍♀️", to_user_id=user_id)
+
+    def _send(self, user_id, reply_token, text):
+        """Birdie 的統一回覆"""
+        send_response(self.line, user_id, reply_token, text)
