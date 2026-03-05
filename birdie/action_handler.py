@@ -24,7 +24,7 @@ class BirdieActionHandler:
     # Birdie 負責的意圖清單
     HANDLED_INTENTS = {
         "Organize_Drive", "Confirm_Action", "Cancel_Action",
-        "Proactive_Process", "Memory_Update",
+        "Proactive_Process", "Memory_Update", "Draft_Email",
     }
 
     def __init__(self, line_service, llm_service, gmail, calendar, tasks, sheets,
@@ -88,6 +88,9 @@ class BirdieActionHandler:
                 result = self.handle_proactive_process()
                 self._send(user_id, reply_token, result)
 
+            elif intent == "Draft_Email":
+                self._handle_draft_email(intent_data, user_msg, user_id, reply_token)
+
         except Exception as e:
             logger.error(f"❌ Birdie 處理執行異常: {e}")
             self._send(user_id, reply_token,
@@ -149,6 +152,53 @@ class BirdieActionHandler:
             memories = self.memory.fetch_relevant_memories(user_msg)
             response = self.llm.generate_chat_response(user_msg, memories)
             self._send(user_id, reply_token, response)
+
+    def _handle_draft_email(self, intent_data, user_msg, user_id, reply_token):
+        """擬稿回信（由 Alice 跨角色轉交，或直接由 IntentRouter 路由）"""
+        from gmail_service import get_recent_emails, create_gmail_draft
+
+        emails = intent_data.get("emails", [])
+
+        # 若無預載信件（直接從 IntentRouter 進來），自行抓取
+        if not emails:
+            search_keyword = intent_data.get("search_keyword", "")
+            emails = get_recent_emails(self.gmail, query=search_keyword) if self.gmail else []
+
+        if not emails:
+            self._send(user_id, reply_token,
+                "仁哥，Birdie 沒有找到需要回覆的信件 📭\n"
+                "可以請您指定寄件人或主旨嗎？例如：「回覆 OOO 的信」")
+            return
+
+        target_email = emails[0]
+        memories = self.memory.fetch_relevant_memories(user_msg)
+
+        self._send(user_id, reply_token,
+            f"✍️ 收到！Birdie 正在為仁哥擬寫回信給「{target_email.get('sender', '對方')}」... ⏳")
+
+        try:
+            draft_body = self.llm.generate_email_draft_reply(target_email, user_msg, memories)
+            create_gmail_draft(
+                self.gmail,
+                to_email=target_email['sender'],
+                subject=f"Re: {target_email['subject']}",
+                body_text=draft_body,
+                thread_id=target_email.get('threadId')
+            )
+            self.line.push_text(
+                f"✅ 仁哥，Birdie 已經幫您在 Gmail 草擬好回信了！\n\n"
+                f"📧 收件人：{target_email['sender']}\n"
+                f"📌 主旨：Re: {target_email['subject']}\n\n"
+                f"草稿內容如下：\n{draft_body}\n\n"
+                "══════════════\n"
+                "— ⚙️ Birdie / 郵件擬稿",
+                to_user_id=user_id)
+            logger.info(f"✅ Birdie 擬稿完成 (用戶: {user_id})")
+        except Exception as e:
+            logger.error(f"❌ Birdie 擬稿失敗: {e}")
+            self.line.push_text(
+                f"仁哥抱歉，Birdie 在擬寫回信時遇到問題：{str(e)} 🙇‍♀️",
+                to_user_id=user_id)
 
     def handle_proactive_process(self) -> str:
         """執行主動處理邏輯並回傳報告字串"""

@@ -13,6 +13,7 @@ class IntentRouter:
     # ===== 第一層：規則式快速匹配 =====
     RULE_PATTERNS = {
         "Query_Email":      ["信件", "郵件", "mail", "email", "寄件", "收件", "信箱", "inbox"],
+        "Draft_Email":      ["回信", "回覆信件", "擬稿", "草擬回信", "草稿"],
         "Query_Calendar":   ["行程", "會議", "行事曆", "schedule", "calendar"],
         "Search_Drive":     ["檔案", "文件", "簡報", "drive", "雲端硬碟", "資料夾", "找檔"],
         "Memory_Update":    ["記住", "記下", "筆記", "存入記憶", "幫我記"],

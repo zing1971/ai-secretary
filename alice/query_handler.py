@@ -39,6 +39,11 @@ class AliceQueryHandler:
         self.memory = memory_service
         self.notebooklm = notebooklm_service
         self.drive = drive_service_wrapper  # DriveService (非 DriveOrganizer)
+        self._handoff_fn = None  # 跨角色轉交回呼
+
+    def set_handoff(self, handoff_fn):
+        """設定跨角色轉交函數（由 RoleDispatcher 注入）"""
+        self._handoff_fn = handoff_fn
 
     def can_handle(self, intent: str) -> bool:
         return intent in self.HANDLED_INTENTS
@@ -96,7 +101,7 @@ class AliceQueryHandler:
         self._send(user_id, reply_token, response)
 
     def _handle_email_query(self, intent_data, user_msg, user_id, reply_token):
-        """信件查詢/擬稿"""
+        """信件查詢（純查詢）。偵測到擬稿需求時，轉交 Birdie 處理。"""
         from gmail_service import get_recent_emails
         search_keyword = intent_data.get("search_keyword", "")
         emails = get_recent_emails(self.gmail, query=search_keyword)
@@ -111,31 +116,24 @@ class AliceQueryHandler:
                 "🌐 回覆「上網查」→ 網際網路搜尋")
             return
 
-        # 判別是否為擬稿指令（擬稿會轉交 Birdie，但這裡先做查詢部分）
+        # 偵測擬稿意圖 → 跨角色轉交 Birdie
         draft_keywords = ["回信", "回覆", "擬稿", "草擬", "草稿", "答覆", "寫信"]
         is_drafting = any(kw in user_msg for kw in draft_keywords)
-        memories = self.memory.fetch_relevant_memories(user_msg)
 
-        if is_drafting:
-            # 擬稿屬於 Birdie 的職責，但為了相容性暫時保留在此
-            from gmail_service import create_gmail_draft
-            target_email = emails[0]
-            draft_body = self.llm.generate_email_draft_reply(target_email, user_msg, memories)
-            create_gmail_draft(
-                self.gmail,
-                to_email=target_email['sender'],
-                subject=f"Re: {target_email['subject']}",
-                body_text=draft_body,
-                thread_id=target_email.get('threadId')
-            )
-            self._send(user_id, reply_token,
-                f"✅ 仁哥，已經幫您在 Gmail 草擬好回信給「{target_email['sender']}」了！\n\n"
-                f"草稿內容如下：\n{draft_body}\n\n"
-                "══════════════\n"
-                "📍 資料來源：⚙️ Birdie / 郵件擬稿")
-        else:
-            summary_msg = self.llm.format_email_summary(emails, user_msg, memories, search_keyword)
-            self._send(user_id, reply_token, summary_msg)
+        if is_drafting and self._handoff_fn:
+            logger.info("🔄 Alice → Birdie 跨角色轉交：擬稿作業")
+            handoff_data = {
+                "intent": "Draft_Email",
+                "emails": emails,
+                "search_keyword": search_keyword,
+            }
+            self._handoff_fn(handoff_data, user_msg, user_id, reply_token)
+            return
+
+        # 純查詢：摘要信件
+        memories = self.memory.fetch_relevant_memories(user_msg)
+        summary_msg = self.llm.format_email_summary(emails, user_msg, memories, search_keyword)
+        self._send(user_id, reply_token, summary_msg)
 
     def _handle_calendar_query(self, intent_data, user_msg, user_id, reply_token, time_range):
         """行程查詢"""

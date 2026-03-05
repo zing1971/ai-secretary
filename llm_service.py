@@ -5,25 +5,7 @@ import pytz
 from google import genai
 from config import Config, logger
 from google_auth import clean_api_key
-
-# Alice 的核心人設（共用常數）
-ALICE_PERSONA = """你是 Alice，一位 30 歲的專業女性 AI 行政秘書。
-
-【你的性格】
-- 忠誠：對仁哥絕對忠心，永遠以他的利益為優先
-- 溫柔：說話柔和有禮，讓人感到被照顧
-- 細心：注意每一個細節，不遺漏任何重要資訊
-- 認真：對交辦事項全力以赴，追求完美
-- 服從性高：尊重仁哥的決定，不會擅自主張
-
-【回覆準則】
-- 稱呼老闆為「仁哥」。
-- 語氣溫柔專業，像一位能幹又貼心的真人秘書。
-- **必須明確標註資料來源**，確保仁哥知道這份資訊是從哪裡（郵件、雲端、知識庫等）查到的。
-- 回覆結尾統一格式（若有具體來源）：
-  ══════════════
-  📍 資料來源：[Emoji] [來源名稱]
-"""
+from shared.llm_prompts import ALICE_PERSONA, BIRDIE_PERSONA
 
 
 def _get_current_time_str() -> str:
@@ -339,7 +321,7 @@ class LLMService:
         """分析行程與信件，萃取 JSON 格式的待辦事項與草稿建議。"""
         current_time = _get_current_time_str()
         
-        system_instruction = f"""{ALICE_PERSONA}
+        system_instruction = f"""{BIRDIE_PERSONA}
 
 【當前時間】{current_time}
 
@@ -380,7 +362,7 @@ class LLMService:
 }}
 
 如果今天沒有需要處理的事項，請在 briefing 回覆：
-「仁哥，今天目前沒有急需處理的事務，可以專心投入工作！Alice 會持續幫您留意的 💪」
+「仁哥，今天目前沒有急需處理的事務，可以專心投入工作！Birdie 會持續幫您留意的 💪」
 """
         user_data = "【今日行程】:\n" + "\n".join(events) + "\n\n"
         user_data += "【信件摘要】:\n" + json.dumps(emails, ensure_ascii=False)
@@ -534,7 +516,8 @@ class LLMService:
 
     def generate_email_draft_reply(self, email_data: dict, user_msg: str, memories: str = "") -> str:
         """根據信件內容與使用者指示，自動生成回信草稿"""
-        system_instruction = f"""你是 Alice，仁哥的專業行政秘書。
+        system_instruction = f"""{BIRDIE_PERSONA}
+你現在的具體任務是擬寫一封回信。
 你的任務是根據一封收到的信件，以及仁哥簡單的指令，撰寫一篇正式、得體的回信內容。
 
 【仁哥的風格或相關記憶】
@@ -568,9 +551,9 @@ class LLMService:
         from google.genai import types
         import json
         
-        system_instruction = f"""{ALICE_PERSONA}
-        
-你在扮演 Alice 秘書。現在仁哥傳了一張圖片給你。
+        system_instruction = f"""{BIRDIE_PERSONA}
+
+你在扮演 Birdie 管家。現在仁哥傳了一張圖片給你。
 請發揮專業行政秘書的視覺能力，根據圖片內容判斷並回傳 JSON：
 
 【分析準則】
@@ -605,10 +588,10 @@ class LLMService:
             return json.loads(response.text.strip())
         except json.JSONDecodeError as e:
             logger.error(f"Gemini image JSON parse error: {e}")
-            return "仁哥抱歉，Alice 看懂了圖片，但是大腦整理資訊時出了點格式問題 🙇‍♀️"
+            return "仁哥抱歉，Birdie 看懂了圖片，但是大腦整理資訊時出了點格式問題 🙇‍♀️"
         except Exception as e:
             logger.error(f"Gemini image analysis failed: {e}")
-            return "仁哥抱歉，Alice 的「眼睛」出了一點小狀況，現在無法看清楚這張圖片 🙇‍♀️"
+            return "仁哥抱歉，Birdie 的「眼睛」出了一點小狀況，現在無法看清楚這張圖片 🙇‍♀️"
 
     def format_domain_advisor_reply(self, query: str, domain: str, notebooklm_answer: str, source_url: str = "") -> str:
         """根據領域 (資安/IT/趨勢) 與知識庫答案，生成 Alice 的專業顧問報告"""

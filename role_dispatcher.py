@@ -86,7 +86,16 @@ class RoleDispatcher:
         # 保留對 drive_organizer 的引用（app.py 需要）
         self.drive_organizer = drive_organizer
 
+        # ===== 跨角色協作：Alice → Birdie 轉交回呼 =====
+        self.alice.set_handoff(self._handoff_to_birdie)
+
         logger.info("🎭 雙角色架構就緒：🔍 Alice（情報秘書）+ ⚙️ Birdie（執行管家）")
+
+    def _handoff_to_birdie(self, intent_data, user_msg, user_id, reply_token):
+        """跨角色轉交：Alice → Birdie"""
+        intent = intent_data.get("intent", "")
+        logger.info(f"🔄 跨角色轉交 Alice→Birdie: {intent}")
+        self.birdie.dispatch(intent_data, user_msg, user_id, reply_token)
 
     def dispatch(self, intent_data, user_msg: str, user_id: str, reply_token: str = None):
         """根據意圖分流給 Alice 或 Birdie"""
