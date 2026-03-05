@@ -19,6 +19,8 @@ class IntentRouter:
         "Memory_Update":    ["記住", "記下", "筆記", "存入記憶", "幫我記"],
         "Organize_Drive":   ["整理雲端", "整理硬碟", "整理 drive", "整理Drive"],
         "Proactive_Process": ["今日簡報", "每日簡報", "今天摘要", "日報"],
+        "Search_Web":        ["上網搜尋", "上網查", "搜尋新聞", "查新聞"],
+        "Query_Tasks":       ["待辦", "todo", "任務清單", "待辦事項"],
     }
     CHAT_PATTERNS = ["早安", "午安", "晚安", "謝謝", "你好", "嗨", "哈囉",
                      "感謝", "辛苦了", "掰掰", "晚安安", "安安"]

@@ -53,66 +53,66 @@ def create_and_link_rich_menu(user_id, image_path="rich_menu_v3_dual_role.jpg"):
             # [Alice] 行程查詢
             {
                 "bounds": {"x": 0, "y": 0, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "Alice，幫我看看最近的行程安排"}
+                "action": {"type": "message", "text": "查詢我未來2天的行程安排，提醒需要準備的事項"}
             },
             # [Alice] 信件查詢
             {
                 "bounds": {"x": CW, "y": 0, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "Alice，檢查最新重要郵件"}
+                "action": {"type": "message", "text": "摘要最新15封郵件重點，標註需要回覆的信"}
             },
             # [Birdie] 今日簡報
             {
                 "bounds": {"x": CW * 2, "y": 0, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "Birdie，今天的工作簡報"}
+                "action": {"type": "message", "text": "今日簡報"}
             },
             # [Birdie] 智慧擬稿
             {
                 "bounds": {"x": CW * 3, "y": 0, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "Birdie，幫我擬回信草稿"}
+                "action": {"type": "message", "text": "檢查最新郵件，挑出需要答覆的信協助草擬"}
             },
 
             # ===== Row 1 =====
             # [Alice] 網路搜尋
             {
                 "bounds": {"x": 0, "y": CH, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "Alice，上網查最新資訊"}
+                "action": {"type": "message", "text": "上網搜尋今天的科技產業與資安重要新聞"}
             },
             # [Alice] 知識庫查詢
             {
                 "bounds": {"x": CW, "y": CH, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "Alice，查一下知識庫"}
+                "action": {"type": "message", "text": "查詢資安知識庫，整理最新威脅情報與防護建議"}
             },
             # [Birdie] 整理雲端
             {
                 "bounds": {"x": CW * 2, "y": CH, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "Birdie，整理雲端硬碟"}
+                "action": {"type": "message", "text": "整理雲端，分析目錄結構並提出分類建議"}
             },
             # [Birdie] 視覺處理
             {
                 "bounds": {"x": CW * 3, "y": CH, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "📸 Birdie，幫忙視覺分析處理照片"}
+                "action": {"type": "message", "text": "我要傳照片給你辨識，請準備接收名片、海報或會議筆記"}
             },
 
             # ===== Row 2 =====
             # [Alice] 待辦查詢
             {
                 "bounds": {"x": 0, "y": CH * 2, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "Alice，整理待辦事項"}
+                "action": {"type": "message", "text": "列出所有待辦事項，依緊急程度排序"}
             },
             # [Alice] 搜尋檔案
             {
                 "bounds": {"x": CW, "y": CH * 2, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "Alice，搜尋雲端檔案"}
+                "action": {"type": "message", "text": "搜尋雲端硬碟本週更新的檔案清單"}
             },
             # [Birdie] 記憶管理
             {
                 "bounds": {"x": CW * 2, "y": CH * 2, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "Birdie，關於我的偏好記住了什麼？"}
+                "action": {"type": "message", "text": "告訴我你們目前知道關於我的所有偏好設定和重要備忘"}
             },
             # [共用] 與我閒聊
             {
                 "bounds": {"x": CW * 3, "y": CH * 2, "width": CW, "height": CH},
-                "action": {"type": "message", "text": "嗨，你們好！"}
+                "action": {"type": "message", "text": "你們好，簡要說明你們各自能提供的服務項目"}
             },
         ]
     }
