@@ -30,13 +30,13 @@ image = f"gcr.io/{project}/{service}"
 
 os.environ["PATH"] = r"C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin;" + os.environ.get("PATH", "")
 
-print("🔧 建置 Docker image...")
+print("Step 2: Build Docker image...")
 subprocess.run(f"gcloud builds submit --tag {image} --project {project}", shell=True, check=True)
 
-print("🚀 部署到 Cloud Run...")
+print("Step 3: Deploy to Cloud Run...")
 subprocess.run(f"gcloud run deploy {service} --image {image} --region {region} --allow-unauthenticated --env-vars-file {env_file} --project {project}", shell=True, check=True)
 
 if os.path.exists(env_file):
     os.remove(env_file)
 
-print("🎉 部署完成！")
+print("Deployment Successful!")

@@ -73,8 +73,8 @@ class IntentRouter:
 
         if len(hits) == 1:
             intent = list(hits.keys())[0]
-            # 特殊規則：Draft_Email 需要 LLM 解析指令上下文，不直接用規則層
-            if intent == "Draft_Email":
+            # 需要精細解析參數的意圖，強制送 LLM 以萃取關鍵字或時間範圍
+            if intent in ["Draft_Email", "Query_Email", "Query_Calendar", "Search_Drive", "Search_Web", "Query_Project_Advisor"]:
                 return None
             return {"intent": intent, "search_keyword": msg}
 
