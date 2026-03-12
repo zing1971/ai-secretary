@@ -15,7 +15,7 @@ class IntentRouter:
         "Query_Email":      ["信件", "郵件", "mail", "email", "寄件", "收件", "信箱", "inbox"],
         "Draft_Email":      ["回信", "回覆信件", "擬稿", "草擬回信", "草稿"],
         "Query_Calendar":   ["行程", "會議", "行事曆", "schedule", "calendar"],
-        "Search_Drive":     ["檔案", "文件", "簡報", "drive", "雲端硬碟", "資料夾", "找檔"],
+        "Search_Drive":     ["檔案", "文件", "drive", "雲端硬碟", "資料夾", "找檔"],
         "Memory_Update":    ["記住", "記下", "筆記", "存入記憶", "幫我記"],
         "Organize_Drive":   ["整理雲端", "整理硬碟", "整理 drive", "整理Drive"],
         "Proactive_Process": ["今日簡報", "今日簡報摘要", "每日簡報", "今天摘要", "日報"],
@@ -124,15 +124,15 @@ class IntentRouter:
 2. "Query_Calendar" — 查詢行程或會議安排。
    - 觸發條件：問題含有時間成份（明天、下週、幾號、幾點）且與行程相關。
    - 必須精確計算並輸出 `time_range` (start_offset, end_offset, label)。
+   - ⚠️ 計算規則：「未來 N 天」指從今天 (offset 0) 開始算的 N 天。例如「未來 2 天」是 offset 0 到 1。
 
 3. "Query_Email" — 查詢或整理電子郵件。
-   - 觸發條件：純查詢或整理信件，沒有要求「回信、擬稿」。
-   - 例如：「幫我找OO的信」、「摘要最新信件」。
+   - 觸發條件：純查詢、摘要、檢查最近信件，或是「找信後協助處理」。
+   - 注意：如果要求「挑出重要信件」、「摘要信件內容」或「檢查信件」，即使提到「協助草擬」，若主要目的是「概覽/檢查」，仍應優先判定為 Query_Email。
    - 輸出 `search_keyword` 與 `time_range`。
 
 4. "Draft_Email" — 擬寫回信或草稿。
-   - 觸發條件：明確要求「回信、擬寫、草擬回信、答覆」。
-   - 例如：「幫我回信給OO說明天會到」、「檢查信件並幫我草擬回覆」。
+   - 觸發條件：明確且直接地要求「回信給誰」、「寫一封信」、「針對這封信擬稿」。
    - 輸出 `search_keyword`（找哪封信來回）與 `draft_instruction`（回覆的具體指示）。
 
 5. "Search_Drive" — 搜尋雲端硬碟檔案。
@@ -141,7 +141,7 @@ class IntentRouter:
 
 5. "Confirm_Action" / "Cancel_Action" — 確認或取消動作。
 
-6. "Memory_Update" — 要求記住某事。
+6. "Memory_Update" — 要求記住或存入新的資訊。注意：若只是查詢「已記住」的內容，請歸類為 Chat。
 
 7. "Organize_Drive" — 要求整理雲端硬碟。
 
@@ -151,7 +151,10 @@ class IntentRouter:
    - 觸發條件：需要最新的外部資訊（天氣、股價、新聞、即時事件）。
    - 必須輸出 `search_keyword`。
 
-10. "Chat" — 純粹的問候閒聊（早安、感謝、問好）。
+10. "Visual_Assistant" — 處理圖片內容（名片、海報、會議筆記）。
+   - 觸發條件：用戶提到要「傳照片、傳圖片、辨識訊息」或要求辨識圖片中內容。
+
+11. "Chat" — 純粹的問候閒聊（早安、感謝、問好）。
 
 🔑 核心判斷規則：
 
