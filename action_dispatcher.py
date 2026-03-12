@@ -155,10 +155,15 @@ class ActionDispatcher:
             
             elif intent == "Proactive_Process":
                 # 觸發主動處理流程
+                self._send_response(user_id, reply_token, "📊 收到！Alice 正在彙整今日行程與郵件，為仁哥製作簡報中... ⏳")
                 result = self.handle_proactive_process()
-                self._send_response(user_id, reply_token, result)
+                self.line.push_text(result, to_user_id=user_id)
                 
             elif intent == "Query_Calendar":
+                # 加入進度通知
+                self._send_response(user_id, reply_token, f"📅 收到！Alice 正在翻閱您的「{time_range.get('label', '行事曆')}」... ⏳")
+                reply_token = None # 後續使用 push
+
                 tz = pytz.timezone('Asia/Taipei')
                 now = datetime.datetime.now(tz)
                 
@@ -186,17 +191,20 @@ class ActionDispatcher:
                 
                 # 請 LLM 格式化回覆 (加入秘書視角)
                 final_response = self.llm.format_calendar_response(events, label, user_msg, memories, search_keyword)
-                self._send_response(user_id, reply_token, final_response)
+                self.line.push_text(final_response, to_user_id=user_id)
                 
             elif intent == "Query_Tasks":
                 # 查詢 Google Tasks
                 if self.tasks:
+                    self._send_response(user_id, reply_token, "✅ 沒問題，Alice 正在查看您的待辦事項清單... ⏳")
+                    reply_token = None
+
                     from tasks_service import list_tasks
                     raw_tasks = list_tasks(self.tasks)
                     # 結合記憶與人設進行格式化
                     memories = self.memory.fetch_relevant_memories(user_msg)
                     final_msg = self.llm.format_tasks_response(raw_tasks, user_msg, memories)
-                    self._send_response(user_id, reply_token, final_msg)
+                    self.line.push_text(final_msg, to_user_id=user_id)
                 else:
                     self._send_response(user_id, reply_token, "仁哥抱歉，尚未授權 Google Tasks 服務 🙇‍♀️")
 
@@ -204,17 +212,20 @@ class ActionDispatcher:
                 # 搜尋 Google Drive
                 if self.drive_organizer and self.drive_organizer.drive:
                     search_keyword = intent_data.get("search_keyword", user_msg)
+                    self._send_response(user_id, reply_token, f"📂 好的！Alice 正在雲端硬碟中搜尋「{search_keyword}」... ⏳")
+                    reply_token = None
+
                     files = self.drive_organizer.drive.search_files_by_keyword(search_keyword)
                     if files:
                         final_msg = self.llm.format_drive_search_results(files, user_msg)
-                        self._send_response(user_id, reply_token, final_msg)
+                        self.line.push_text(final_msg, to_user_id=user_id)
                     else:
-                        self._send_response(user_id, reply_token,
+                        self.line.push_text(
                             f"仁哥，雲端硬碟中沒有找到與「{search_keyword}」相關的檔案 📭\n\n"
                             "要不要 Alice 幫您換個方向查查看？\n"
                             "📚 回覆「查知識庫」→ 搜尋內部專業文件\n"
                             "📧 回覆「查信件」→ 搜尋電子郵件\n"
-                            "🌐 回覆「上網查」→ 網際網路搜尋")
+                            "🌐 回覆「上網查」→ 網際網路搜尋", to_user_id=user_id)
                 else:
                     self._send_response(user_id, reply_token, "仁哥抱歉，尚未授權 Google Drive 服務 🙇‍♀️")
 
@@ -225,7 +236,9 @@ class ActionDispatcher:
 
             elif intent == "Query_Email":
                 search_keyword = intent_data.get("search_keyword", "")
-                
+                self._send_response(user_id, reply_token, f"📧 收到，Alice 正在您的信箱中檢索「{search_keyword if search_keyword else '最新郵件'}」... ⏳")
+                reply_token = None
+
                 # 紀錄上下文，方便後續擬稿時參考
                 self._user_email_context[user_id] = search_keyword
                 
@@ -235,21 +248,24 @@ class ActionDispatcher:
                     memories = self.memory.fetch_relevant_memories(user_msg)
                     # 摘要分析信件
                     summary_msg = self.llm.format_email_summary(emails, user_msg, memories, search_keyword)
-                    self._send_response(user_id, reply_token, summary_msg)
+                    self.line.push_text(summary_msg, to_user_id=user_id)
                 else:
                     kw_display = f"與「{search_keyword}」相關的" if search_keyword else "符合的相關"
-                    self._send_response(user_id, reply_token,
+                    self.line.push_text(
                         f"仁哥，信箱中沒有找到{kw_display}信件 📭\n\n"
                         "要不要 Alice 幫您換個方向查查看？\n"
                         "📚 回覆「查知識庫」→ 搜尋內部專業文件\n"
                         "☁️ 回覆「找檔案」→ 搜尋雲端硬碟\n"
-                        "🌐 回覆「上網查」→ 網際網路搜尋")
+                        "🌐 回覆「上網查」→ 網際網路搜尋", to_user_id=user_id)
             
             elif intent == "Draft_Email":
                 # 若無搜尋關鍵字，嘗試擷取上一次 Query_Email 的上下文
                 search_keyword = intent_data.get("search_keyword", "")
                 if not search_keyword and user_id in self._user_email_context:
                     search_keyword = self._user_email_context[user_id]
+
+                self._send_response(user_id, reply_token, f"✍️ 好的，Alice 正在讀取信件並為您草擬回覆... ⏳")
+                reply_token = None
 
                 draft_instruction = intent_data.get("draft_instruction", user_msg)
                 emails = get_recent_emails(self.gmail, query=search_keyword)
@@ -269,9 +285,9 @@ class ActionDispatcher:
                         thread_id=target_email.get('threadId')
                     )
                     
-                    self._send_response(user_id, reply_token, f"✅ 仁哥，已經幫您在 Gmail 草擬好回信給「{target_email['sender']}」了！\n\n草稿內容如下：\n{draft_body}")
+                    self.line.push_text(f"✅ 仁哥，已經幫您在 Gmail 草擬好回信給「{target_email['sender']}」了！\n\n草稿內容如下：\n{draft_body}", to_user_id=user_id)
                 else:
-                    self._send_response(user_id, reply_token, f"仁哥，我找不到相關的信件來回覆 📭，請告訴我要回信給誰或主旨是什麼。")
+                    self.line.push_text(f"仁哥，我找不到相關的信件來回覆 📭，請告訴我要回信給誰或主旨是什麼。", to_user_id=user_id)
             
             elif intent == "Query_Project_Advisor":
                 domain = intent_data.get("domain", "it")
