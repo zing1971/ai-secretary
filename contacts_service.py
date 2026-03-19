@@ -1,6 +1,16 @@
 import base64
 from config import logger
 
+# 預設聯絡人群組清單（AI 自動分類時可選擇的群組）
+CONTACT_GROUPS = [
+    "政府機關",
+    "學術研究",
+    "廠商代表",
+    "關鍵夥伴",
+    "媒體公關",
+    "其他",
+]
+
 def create_contact(service, name: str, company: str, job_title: str, 
                    email: str, phone: str, photo_bytes: bytes = None):
     """建立新的 Google 聯絡人，並可選擇附加名片照片
@@ -55,3 +65,55 @@ def create_contact(service, name: str, company: str, job_title: str,
     except Exception as e:
         logger.error(f"建立聯絡人失敗: {e}", exc_info=True)
         return None
+
+
+def ensure_contact_group(service, group_name: str) -> str | None:
+    """確保指定名稱的聯絡人群組存在，若不存在則自動建立。
+    Args:
+        service: Google People API service instance
+        group_name: 群組名稱（如「客戶」、「廠商代表」）
+    Returns:
+        群組的 resourceName（字串），失敗時回傳 None
+    """
+    try:
+        # 列出所有現有使用者自建群組（userContactGroups）
+        result = service.contactGroups().list(
+            pageSize=100
+        ).execute()
+        for group in result.get('contactGroups', []):
+            if group.get('groupType') == 'USER_CONTACT_GROUP' and group.get('name') == group_name:
+                logger.info(f"🏷️ 找到既有群組: {group_name} ({group['resourceName']})")
+                return group['resourceName']
+
+        # 群組不存在 → 建立新群組
+        new_group = service.contactGroups().create(
+            body={'contactGroup': {'name': group_name}}
+        ).execute()
+        resource_name = new_group.get('resourceName')
+        logger.info(f"✅ 成功建立新群組: {group_name} ({resource_name})")
+        return resource_name
+
+    except Exception as e:
+        logger.error(f"確認/建立聯絡人群組失敗 ({group_name}): {e}")
+        return None
+
+
+def add_contact_to_group(service, contact_resource_name: str, group_resource_name: str) -> bool:
+    """將聯絡人加入指定群組。
+    Args:
+        service: Google People API service instance
+        contact_resource_name: 聯絡人的 resourceName (如 people/c123456)
+        group_resource_name: 群組的 resourceName (如 contactGroups/123456)
+    Returns:
+        成功回傳 True，失敗回傳 False
+    """
+    try:
+        service.contactGroups().members().modify(
+            resourceName=group_resource_name,
+            body={'resourceNamesToAdd': [contact_resource_name]}
+        ).execute()
+        logger.info(f"✅ 已將 {contact_resource_name} 加入群組 {group_resource_name}")
+        return True
+    except Exception as e:
+        logger.error(f"加入聯絡人群組失敗: {e}")
+        return False

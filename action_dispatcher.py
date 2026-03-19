@@ -4,7 +4,7 @@ import pytz
 from calendar_service import get_todays_events, get_events
 from gmail_service import get_recent_emails, create_gmail_draft
 from tasks_service import create_google_task
-from contacts_service import create_contact
+from contacts_service import create_contact, ensure_contact_group, add_contact_to_group, CONTACT_GROUPS
 from llm_service import LLMService
 from config import logger
 from line_service import LineService
@@ -517,10 +517,11 @@ class ActionDispatcher:
                     create_google_task(self.tasks, t.get('title'), t.get('notes'), t.get('due'))
                     tasks_created += 1
             
-            # 建立聯絡人（附帶名片影像）
+            # 建立聯絡人（附帶名片影像）並加入群組
+            contacts_group_info = []  # 用於回報訊息
             for c in analysis_data.get('contacts', []):
                 if self.people:
-                    create_contact(
+                    created = create_contact(
                         self.people, 
                         name=c.get('name', ''), 
                         company=c.get('company', ''), 
@@ -531,6 +532,20 @@ class ActionDispatcher:
                     )
                     contacts_created += 1
 
+                    # 取得 LLM 判斷的群組分類（若不在清單內則 fallback 為「其他」）
+                    raw_group = c.get('contact_group', '其他').strip()
+                    group_name = raw_group if raw_group in CONTACT_GROUPS else '其他'
+
+                    # 確保群組存在並加入聯絡人
+                    if created:
+                        contact_resource = created.get('resourceName')
+                        group_resource = ensure_contact_group(self.people, group_name)
+                        if contact_resource and group_resource:
+                            add_contact_to_group(self.people, contact_resource, group_resource)
+                            contacts_group_info.append(f"{c.get('name', '未知')} → 🏷️ {group_name}")
+                        else:
+                            contacts_group_info.append(f"{c.get('name', '未知')} → ⚠️ 群組分類失敗")
+
             briefing = analysis_data.get('briefing', '已為您處理圖片完畢。')
             
             # 組合成果
@@ -538,7 +553,10 @@ class ActionDispatcher:
             if tasks_created > 0:
                 summary_parts.append(f"✅ 自動建立了 {tasks_created} 項 Google 待辦任務")
             if contacts_created > 0:
-                summary_parts.append(f"📇 自動建立了 {contacts_created} 筆 Google 聯絡人")
+                group_detail = "\n  ".join(contacts_group_info) if contacts_group_info else ""
+                summary_parts.append(
+                    f"📇 自動建立了 {contacts_created} 筆 Google 聯絡人\n  {group_detail}"
+                )
             
             if summary_parts:
                 briefing += "\n\n" + "\n".join(summary_parts)
