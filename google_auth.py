@@ -62,7 +62,11 @@ def get_google_services():
                 if not os.path.exists('credentials.json'):
                     raise FileNotFoundError("請確保 credentials.json 檔案存在或已設定 GOOGLE_CREDENTIALS_JSON 環境變數。")
                 flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-                creds = flow.run_local_server(port=8080)
+                creds = flow.run_local_server(
+                    port=8080,
+                    access_type='offline',
+                    prompt='consent'
+                )
         
         # 儲存下一次執行使用的憑證 (如果在開發環境下)
         if not os.environ.get("DEPLOY_ENV") == "cloud":
