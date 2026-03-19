@@ -1,7 +1,7 @@
 import base64
 from config import logger
 
-# 預設聯絡人標籤清單（AI 自動分類時可選擇的標籤）
+# 預設聯絡人標籤清單（對應 Google 聯絡人「標籤」功能）
 CONTACT_LABELS = [
     "政府機關",
     "學術研究",
@@ -14,19 +14,66 @@ CONTACT_LABELS = [
 # 向後相容別名
 CONTACT_GROUPS = CONTACT_LABELS
 
+
+def _ensure_label(service, label_name: str) -> str | None:
+    """確保指定標籤（Contact Group）存在，不存在則建立。
+    Returns:
+        標籤的 resourceName，失敗時回傳 None
+    """
+    try:
+        result = service.contactGroups().list(pageSize=200).execute()
+        for group in result.get('contactGroups', []):
+            if (group.get('groupType') == 'USER_CONTACT_GROUP'
+                    and group.get('name') == label_name):
+                return group['resourceName']
+
+        new_group = service.contactGroups().create(
+            body={'contactGroup': {'name': label_name}}
+        ).execute()
+        resource_name = new_group.get('resourceName')
+        logger.info(f"✅ 建立新標籤: {label_name} ({resource_name})")
+        return resource_name
+
+    except Exception as e:
+        logger.error(f"確認/建立標籤失敗 ({label_name}): {e}")
+        return None
+
+
+def _add_to_label(service, contact_resource_name: str, group_resource_name: str) -> bool:
+    """將聯絡人加入標籤（Contact Group）。"""
+    try:
+        service.contactGroups().members().modify(
+            resourceName=group_resource_name,
+            body={'resourceNamesToAdd': [contact_resource_name]}
+        ).execute()
+        logger.info(f"🏷️ {contact_resource_name} → {group_resource_name}")
+        return True
+    except Exception as e:
+        logger.error(f"加入標籤失敗: {e}")
+        return False
+
+
+def assign_label_to_contact(service, contact_resource_name: str, label_name: str) -> bool:
+    """確保標籤存在並將聯絡人加入該標籤。
+    Returns:
+        成功回傳 True，失敗回傳 False
+    """
+    group_rn = _ensure_label(service, label_name)
+    if not group_rn:
+        return False
+    return _add_to_label(service, contact_resource_name, group_rn)
+
+
 def create_contact(service, name: str, company: str, job_title: str,
                    email: str, phone: str, photo_bytes: bytes = None,
                    label: str = None):
-    """建立新的 Google 聯絡人，並可選擇附加名片照片與分類標籤
+    """建立新的 Google 聯絡人，並可選擇附加名片照片與分類標籤。
+    標籤寫入 Google 聯絡人「標籤」（Contact Group），在 UI 可側邊欄篩選。
     Args:
         service: Google People API service instance
-        name: 姓名
-        company: 公司名稱
-        job_title: 職稱
-        email: 電子郵件
-        phone: 電話號碼
-        photo_bytes: 名片影像的原始位元組 (JPEG)
-        label: 分類標籤（直接寫入聯絡人 userDefined 欄位）
+        name, company, job_title, email, phone: 聯絡人基本資訊
+        photo_bytes: 名片影像原始位元組 (JPEG)
+        label: 分類標籤名稱（須在 CONTACT_LABELS 清單內）
     Returns:
         建立成功的聯絡人物件，或 None
     """
@@ -48,15 +95,20 @@ def create_contact(service, name: str, company: str, job_title: str,
         if phone:
             contact_body['phoneNumbers'] = [{'value': phone, 'type': 'work'}]
 
-        if label:
-            contact_body['userDefined'] = [{'key': '分類', 'value': label}]
-
         # 步驟 1：建立聯絡人
         created_contact = service.people().createContact(body=contact_body).execute()
         resource_name = created_contact.get('resourceName')
-        logger.info(f"✅ 成功建立聯絡人: {name} ({resource_name}) 標籤: {label or '無'}")
+        logger.info(f"✅ 成功建立聯絡人: {name} ({resource_name})")
 
-        # 步驟 2：如果有名片影像，上傳為聯絡人照片
+        # 步驟 2：寫入標籤（Contact Group）
+        if label and resource_name:
+            ok = assign_label_to_contact(service, resource_name, label)
+            if ok:
+                logger.info(f"🏷️ 已貼標籤 [{label}] 至聯絡人: {name}")
+            else:
+                logger.warning(f"⚠️ 聯絡人已建立但標籤寫入失敗: {name}")
+
+        # 步驟 3：上傳名片照片
         if photo_bytes and resource_name:
             try:
                 photo_b64 = base64.b64encode(photo_bytes).decode('utf-8')
@@ -76,9 +128,10 @@ def create_contact(service, name: str, company: str, job_title: str,
 
 
 def get_unlabeled_contacts(service) -> list[dict]:
-    """取得所有沒有「分類」標籤的聯絡人。
+    """取得所有未貼任何使用者自訂標籤的聯絡人。
+    判斷依據：memberships 中沒有任何 USER_CONTACT_GROUP 類型的群組。
     Returns:
-        list of dict，每筆包含 resourceName, etag, name, company, job_title
+        list of dict，每筆含 resourceName, name, company, job_title
     """
     unlabeled = []
     page_token = None
@@ -87,24 +140,29 @@ def get_unlabeled_contacts(service) -> list[dict]:
             kwargs = {
                 'resourceName': 'people/me',
                 'pageSize': 1000,
-                'personFields': 'names,organizations,userDefined',
+                'personFields': 'names,organizations,memberships',
             }
             if page_token:
                 kwargs['pageToken'] = page_token
 
             result = service.people().connections().list(**kwargs).execute()
             for person in result.get('connections', []):
-                # 檢查是否已有「分類」標籤
-                user_defined = person.get('userDefined', [])
-                has_label = any(ud.get('key') == '分類' for ud in user_defined)
-                if has_label:
+                memberships = person.get('memberships', [])
+                # 系統群組 ID 為英文（myContacts/starred/all…），使用者標籤 ID 為純數字
+                has_user_label = any(
+                    m.get('contactGroupMembership', {})
+                     .get('contactGroupResourceName', '')
+                     .split('/')[-1].isdigit()
+                    for m in memberships
+                )
+
+                if has_user_label:
                     continue
 
                 names = person.get('names', [{}])
                 orgs = person.get('organizations', [{}])
                 unlabeled.append({
                     'resourceName': person.get('resourceName'),
-                    'etag': person.get('etag', ''),
                     'name': names[0].get('displayName', '') if names else '',
                     'company': orgs[0].get('name', '') if orgs else '',
                     'job_title': orgs[0].get('title', '') if orgs else '',
@@ -122,28 +180,6 @@ def get_unlabeled_contacts(service) -> list[dict]:
         return []
 
 
-def update_contact_label(service, resource_name: str, etag: str, label: str) -> bool:
-    """更新聯絡人的分類標籤（userDefined 欄位）。
-    Args:
-        service: Google People API service instance
-        resource_name: 聯絡人 resourceName (e.g. people/c123456)
-        etag: 聯絡人 etag（updateContact 必須提供）
-        label: 要寫入的標籤名稱
-    Returns:
-        成功回傳 True，失敗回傳 False
-    """
-    try:
-        service.people().updateContact(
-            resourceName=resource_name,
-            updatePersonFields='userDefined',
-            body={
-                'resourceName': resource_name,
-                'etag': etag,
-                'userDefined': [{'key': '分類', 'value': label}],
-            }
-        ).execute()
-        logger.info(f"🏷️ 已更新標籤 {resource_name} → {label}")
-        return True
-    except Exception as e:
-        logger.error(f"更新標籤失敗 ({resource_name}): {e}")
-        return False
+def update_contact_label(service, resource_name: str, _etag: str, label: str) -> bool:
+    """將聯絡人加入指定標籤（Contact Group）。_etag 參數保留供向後相容，不使用。"""
+    return assign_label_to_contact(service, resource_name, label)
