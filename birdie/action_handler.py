@@ -11,9 +11,11 @@ Birdie — ⚙️ 執行管家 動作處理器
 import datetime
 import pytz
 import logging
+import threading
 
 from shared.line_responder import send_response
 from shared.clarify_handler import CONFIRM_KEYWORDS, CANCEL_KEYWORDS
+from contacts_service import CONTACT_LABELS, get_unlabeled_contacts, update_contact_label
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,8 @@ class BirdieActionHandler:
 
     # Birdie 負責的意圖清單
     HANDLED_INTENTS = {
-        "Organize_Drive", "Confirm_Action", "Cancel_Action",
+        "Organize_Drive", "Organize_Contacts",
+        "Confirm_Action", "Cancel_Action",
         "Proactive_Process", "Memory_Update", "Draft_Email",
     }
 
@@ -78,6 +81,9 @@ class BirdieActionHandler:
             elif intent == "Organize_Drive":
                 self._handle_organize_drive(user_id, reply_token)
 
+            elif intent == "Organize_Contacts":
+                self._handle_organize_contacts(user_id, reply_token)
+
             elif intent == "Confirm_Action":
                 self._handle_confirm(user_msg, user_id, reply_token)
 
@@ -130,6 +136,65 @@ class BirdieActionHandler:
         self._send(user_id, reply_token, "📂 收到！Birdie 正在掃描雲端硬碟，請稍候... ⏳")
         result = self.drive_organizer.scan_and_propose(user_id)
         self.line.push_text(result, to_user_id=user_id)
+
+    def _handle_organize_contacts(self, user_id, reply_token):
+        """整理聯絡人：掃描並批次貼標籤"""
+        if not self.people:
+            self._send(user_id, reply_token, "仁哥抱歉，聯絡人服務尚未就緒 🙇‍♀️")
+            return
+        self._send(user_id, reply_token, "📇 收到！Birdie 正在掃描聯絡人清單，請稍候... ⏳")
+        threading.Thread(
+            target=self._organize_contacts_worker,
+            args=(user_id,),
+            daemon=True
+        ).start()
+
+    def _organize_contacts_worker(self, user_id: str):
+        """背景執行：掃描未分類聯絡人並逐批貼標籤，每 10 筆回報進度。"""
+        try:
+            contacts = get_unlabeled_contacts(self.people)
+            total = len(contacts)
+
+            if total == 0:
+                self.line.push_text("✅ 仁哥，所有聯絡人都已有分類標籤，無需整理！", to_user_id=user_id)
+                return
+
+            self.line.push_text(
+                f"📋 共找到 {total} 筆未分類聯絡人，Birdie 開始逐一分類，每處理 10 筆會回報進度 🏷️",
+                to_user_id=user_id
+            )
+
+            batch_log = []
+            success = 0
+            failed = 0
+
+            for i, c in enumerate(contacts, start=1):
+                label = self.llm.classify_contact_label(
+                    name=c['name'],
+                    company=c['company'],
+                    job_title=c['job_title'],
+                )
+                ok = update_contact_label(self.people, c['resourceName'], c['etag'], label)
+                if ok:
+                    success += 1
+                    batch_log.append(f"  ✅ {c['name'] or '(無姓名)'} / {c['company'] or '(無公司)'} → {label}")
+                else:
+                    failed += 1
+                    batch_log.append(f"  ⚠️ {c['name'] or '(無姓名)'} → 更新失敗")
+
+                if i % 10 == 0 or i == total:
+                    progress = f"📊 進度 {i}/{total}（✅{success} ⚠️{failed}）\n" + "\n".join(batch_log)
+                    self.line.push_text(progress, to_user_id=user_id)
+                    batch_log = []
+
+            self.line.push_text(
+                f"🎉 聯絡人整理完成！\n共處理 {total} 筆，成功 {success} 筆，失敗 {failed} 筆。",
+                to_user_id=user_id
+            )
+
+        except Exception as e:
+            logger.error(f"整理聯絡人失敗: {e}", exc_info=True)
+            self.line.push_text(f"仁哥抱歉，整理聯絡人時發生錯誤：{e} 🙇‍♀️", to_user_id=user_id)
 
     def _handle_confirm(self, user_msg, user_id, reply_token):
         """確認執行"""
@@ -263,6 +328,8 @@ class BirdieActionHandler:
 
             for c in analysis_data.get('contacts', []):
                 if self.people:
+                    raw_label = c.get('contact_group', '其他').strip()
+                    label = raw_label if raw_label in CONTACT_LABELS else '其他'
                     create_contact(
                         self.people,
                         name=c.get('name', ''),
@@ -270,7 +337,8 @@ class BirdieActionHandler:
                         job_title=c.get('job_title', ''),
                         email=c.get('email', ''),
                         phone=c.get('phone', ''),
-                        photo_bytes=image_bytes
+                        photo_bytes=image_bytes,
+                        label=label,
                     )
                     contacts_created += 1
 
