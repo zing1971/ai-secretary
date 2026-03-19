@@ -600,13 +600,28 @@ class LLMService:
             logger.error(f"Gemini image analysis failed: {e}")
             return "仁哥抱歉，Birdie 的「眼睛」出了一點小狀況，現在無法看清楚這張圖片 🙇‍♀️"
 
-    def classify_contact_label(self, name: str, company: str, job_title: str) -> str:
-        """根據姓名、公司、職稱，由 LLM 判斷最適合的分類標籤。
+    def classify_contact_label(self, name: str, company: str, job_title: str,
+                               email: str = '') -> str:
+        """根據姓名、公司、職稱、email，判斷最適合的分類標籤。
+        優先以 email domain 規則快速判斷，規則無法確定時再呼叫 LLM。
         Returns:
             標籤名稱字串（保證在 CONTACT_LABELS 清單內）
         """
         from contacts_service import CONTACT_LABELS
-        import json
+
+        # ── 規則層：依 email domain 快速判斷 ──
+        if email and '@' in email:
+            domain = email.split('@')[-1].lower()
+            if any(domain.endswith(s) for s in ['.gov', '.gov.tw', '.gov.uk', '.gov.au']):
+                return '政府機關'
+            if any(domain.endswith(s) for s in ['.edu', '.edu.tw', '.ac.uk', '.ac.jp']):
+                return '學術研究'
+            # .com / .com.tw → 廠商代表（弱訊號，仍交 LLM 結合職稱確認）
+
+        # ── LLM 層：結合所有欄位精細判斷 ──
+        domain_hint = ''
+        if email and '@' in email:
+            domain_hint = f"\n- Email Domain：{email.split('@')[-1].lower()}（.com/.com.tw 通常為廠商代表）"
 
         prompt = f"""請根據以下聯絡人資訊，從標籤清單中選出最適合的一個標籤，只輸出標籤名稱，禁止其他文字。
 
@@ -614,11 +629,12 @@ class LLMService:
 - 姓名：{name or '未知'}
 - 公司：{company or '未知'}
 - 職稱：{job_title or '未知'}
+- Email：{email or '未知'}{domain_hint}
 
 標籤清單（擇一）：
-- 政府機關：各政府部門、公務機關、公營事業單位人員
-- 學術研究：大學、研究院、學術機構相關人員
-- 廠商代表：供應商、設備商、外包協力廠商業務
+- 政府機關：各政府部門、公務機關、公營事業單位人員（domain 常見 .gov / .gov.tw）
+- 學術研究：大學、研究院、學術機構相關人員（domain 常見 .edu / .edu.tw / .ac.xx）
+- 廠商代表：供應商、設備商、外包協力廠商業務（domain 常見 .com / .com.tw）
 - 關鍵夥伴：策略合作夥伴、重要客戶、簽約合作對象
 - 媒體公關：記者、媒體公司、公關公司人員
 - 其他：無法明確歸類

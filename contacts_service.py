@@ -140,7 +140,7 @@ def get_unlabeled_contacts(service) -> list[dict]:
             kwargs = {
                 'resourceName': 'people/me',
                 'pageSize': 1000,
-                'personFields': 'names,organizations,memberships',
+                'personFields': 'names,organizations,memberships,emailAddresses',
             }
             if page_token:
                 kwargs['pageToken'] = page_token
@@ -161,11 +161,13 @@ def get_unlabeled_contacts(service) -> list[dict]:
 
                 names = person.get('names', [{}])
                 orgs = person.get('organizations', [{}])
+                emails = person.get('emailAddresses', [{}])
                 unlabeled.append({
                     'resourceName': person.get('resourceName'),
                     'name': names[0].get('displayName', '') if names else '',
                     'company': orgs[0].get('name', '') if orgs else '',
                     'job_title': orgs[0].get('title', '') if orgs else '',
+                    'email': emails[0].get('value', '') if emails else '',
                 })
 
             page_token = result.get('nextPageToken')

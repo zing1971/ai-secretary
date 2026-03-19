@@ -531,8 +531,9 @@ class ActionDispatcher:
                     name=c['name'],
                     company=c['company'],
                     job_title=c['job_title'],
+                    email=c.get('email', ''),
                 )
-                ok = update_contact_label(self.people, c['resourceName'], c['etag'], label)
+                ok = update_contact_label(self.people, c['resourceName'], c.get('etag', ''), label)
                 if ok:
                     success += 1
                     batch_log.append(f"  ✅ {c['name'] or '(無姓名)'} / {c['company'] or '(無公司)'} → {label}")
