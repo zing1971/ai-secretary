@@ -600,6 +600,42 @@ class LLMService:
             logger.error(f"Gemini image analysis failed: {e}")
             return "仁哥抱歉，Birdie 的「眼睛」出了一點小狀況，現在無法看清楚這張圖片 🙇‍♀️"
 
+    def classify_contact_label(self, name: str, company: str, job_title: str) -> str:
+        """根據姓名、公司、職稱，由 LLM 判斷最適合的分類標籤。
+        Returns:
+            標籤名稱字串（保證在 CONTACT_LABELS 清單內）
+        """
+        from contacts_service import CONTACT_LABELS
+        import json
+
+        prompt = f"""請根據以下聯絡人資訊，從標籤清單中選出最適合的一個標籤，只輸出標籤名稱，禁止其他文字。
+
+聯絡人：
+- 姓名：{name or '未知'}
+- 公司：{company or '未知'}
+- 職稱：{job_title or '未知'}
+
+標籤清單（擇一）：
+- 政府機關：各政府部門、公務機關、公營事業單位人員
+- 學術研究：大學、研究院、學術機構相關人員
+- 廠商代表：供應商、設備商、外包協力廠商業務
+- 關鍵夥伴：策略合作夥伴、重要客戶、簽約合作對象
+- 媒體公關：記者、媒體公司、公關公司人員
+- 其他：無法明確歸類
+
+只輸出標籤名稱，例如：廠商代表"""
+
+        try:
+            response = self.client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=prompt,
+            )
+            label = response.text.strip()
+            return label if label in CONTACT_LABELS else '其他'
+        except Exception as e:
+            logger.error(f"聯絡人分類失敗 ({name}): {e}")
+            return '其他'
+
     def format_domain_advisor_reply(self, query: str, domain: str, notebooklm_answer: str, source_url: str = "") -> str:
         """根據領域 (資安/IT/趨勢) 與知識庫答案，生成 Alice 的專業顧問報告"""
         domain_labels = {

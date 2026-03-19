@@ -4,7 +4,7 @@ import pytz
 from calendar_service import get_todays_events, get_events
 from gmail_service import get_recent_emails, create_gmail_draft
 from tasks_service import create_google_task
-from contacts_service import create_contact, CONTACT_LABELS
+from contacts_service import create_contact, CONTACT_LABELS, get_unlabeled_contacts, update_contact_label
 from llm_service import LLMService
 from config import logger
 from line_service import LineService
@@ -129,6 +129,17 @@ class ActionDispatcher:
                 result = self.drive_organizer.scan_and_propose(user_id)
                 # 提案需透過 push 發送（reply_token 已用完）
                 self.line.push_text(result, to_user_id=user_id)
+
+            elif intent == "Organize_Contacts":
+                if not self.people:
+                    self._send_response(user_id, reply_token, "仁哥抱歉，聯絡人服務尚未就緒 🙇‍♀️")
+                    return
+                self._send_response(user_id, reply_token, "📇 收到！Alice 正在掃描聯絡人清單，請稍候... ⏳")
+                threading.Thread(
+                    target=self._organize_contacts_worker,
+                    args=(user_id,),
+                    daemon=True
+                ).start()
 
             elif intent == "Confirm_Action":
                 # 確認執行待處理的操作
@@ -495,6 +506,54 @@ class ActionDispatcher:
         except Exception as e:
             logger.error(f"主動處理失敗: {e}")
             return f"仁哥抱歉，Alice 在處理時遇到了問題：{str(e)} 🙇‍♀️"
+
+    def _organize_contacts_worker(self, user_id: str):
+        """背景執行：掃描未分類聯絡人並逐批貼標籤，每 10 筆回報進度。"""
+        try:
+            contacts = get_unlabeled_contacts(self.people)
+            total = len(contacts)
+
+            if total == 0:
+                self.line.push_text("✅ 仁哥，所有聯絡人都已有分類標籤，無需整理！", to_user_id=user_id)
+                return
+
+            self.line.push_text(
+                f"📋 共找到 {total} 筆未分類聯絡人，Alice 開始逐一分類，每處理 10 筆會回報進度 🏷️",
+                to_user_id=user_id
+            )
+
+            batch_log = []
+            success = 0
+            failed = 0
+
+            for i, c in enumerate(contacts, start=1):
+                label = self.llm.classify_contact_label(
+                    name=c['name'],
+                    company=c['company'],
+                    job_title=c['job_title'],
+                )
+                ok = update_contact_label(self.people, c['resourceName'], c['etag'], label)
+                if ok:
+                    success += 1
+                    batch_log.append(f"  ✅ {c['name'] or '(無姓名)'} / {c['company'] or '(無公司)'} → {label}")
+                else:
+                    failed += 1
+                    batch_log.append(f"  ⚠️ {c['name'] or '(無姓名)'} → 更新失敗")
+
+                # 每 10 筆或最後一筆時回報
+                if i % 10 == 0 or i == total:
+                    progress = f"📊 進度 {i}/{total}（✅{success} ⚠️{failed}）\n" + "\n".join(batch_log)
+                    self.line.push_text(progress, to_user_id=user_id)
+                    batch_log = []
+
+            self.line.push_text(
+                f"🎉 聯絡人整理完成！\n共處理 {total} 筆，成功 {success} 筆，失敗 {failed} 筆。",
+                to_user_id=user_id
+            )
+
+        except Exception as e:
+            logger.error(f"整理聯絡人失敗: {e}", exc_info=True)
+            self.line.push_text(f"仁哥抱歉，整理聯絡人時發生錯誤：{e} 🙇‍♀️", to_user_id=user_id)
 
     def dispatch_image(self, image_bytes: bytes, user_id: str, reply_token: str):
         """處理收到的圖片訊息"""
