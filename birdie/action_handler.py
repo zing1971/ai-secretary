@@ -12,10 +12,13 @@ import datetime
 import pytz
 import logging
 import threading
+from collections import defaultdict
+
 
 from shared.line_responder import send_response
 from shared.clarify_handler import CONFIRM_KEYWORDS, CANCEL_KEYWORDS
-from contacts_service import CONTACT_LABELS, get_unlabeled_contacts, update_contact_label
+from contacts_service import (CONTACT_LABELS, get_unlabeled_contacts,
+                               build_label_cache, batch_assign_label)
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +33,9 @@ class BirdieActionHandler:
         "Proactive_Process", "Memory_Update", "Draft_Email",
     }
 
-    def __init__(self, line_service, llm_service, gmail, calendar, tasks, sheets,
+    def __init__(self, messaging_service, llm_service, gmail, calendar, tasks, sheets,
                  memory_service, drive_organizer=None, people=None):
-        self.line = line_service
+        self.line = messaging_service
         self.llm = llm_service
         self.gmail = gmail
         self.calendar = calendar
@@ -150,7 +153,13 @@ class BirdieActionHandler:
         ).start()
 
     def _organize_contacts_worker(self, user_id: str):
-        """背景執行：掃描未分類聯絡人並逐批貼標籤，每 10 筆回報進度。"""
+        """背景執行：掃描未分類聯絡人並批次貼標籤。
+        優化：
+          1. 一次性標籤快取 — 避免 N 次 contactGroups().list()
+          2. 循序 LLM 分類 — 避免 ThreadPoolExecutor timeout 累積問題
+          3. 定時 thread 每 5 分鐘推播進度 — 不依賴筆數，給予穩定反饋
+          4. 同標籤滿 10 筆即寫入 — 分類與寫入交錯進行
+        """
         try:
             contacts = get_unlabeled_contacts(self.people)
             total = len(contacts)
@@ -160,38 +169,81 @@ class BirdieActionHandler:
                 return
 
             self.line.push_text(
-                f"📋 共找到 {total} 筆未分類聯絡人，Birdie 開始逐一分類，每處理 10 筆會回報進度 🏷️",
+                f"📋 共找到 {total} 筆未分類聯絡人，Birdie 開始分類中 🏷️",
                 to_user_id=user_id
             )
 
-            batch_log = []
+            label_cache = build_label_cache(self.people)
+            pending = defaultdict(list)
+            summary_count = defaultdict(int)
             success = 0
             failed = 0
+            completed = [0]       # mutable，供 timer thread 讀取
+            stop_event = threading.Event()
 
-            for i, c in enumerate(contacts, start=1):
-                label = self.llm.classify_contact_label(
-                    name=c['name'],
-                    company=c['company'],
-                    job_title=c['job_title'],
-                    email=c.get('email', ''),
-                )
-                ok = update_contact_label(self.people, c['resourceName'], c.get('etag', ''), label)
-                if ok:
-                    success += 1
-                    batch_log.append(f"  ✅ {c['name'] or '(無姓名)'} / {c['company'] or '(無公司)'} → {label}")
-                else:
-                    failed += 1
-                    batch_log.append(f"  ⚠️ {c['name'] or '(無姓名)'} → 更新失敗")
+            def timer_reporter():
+                while not stop_event.wait(300):   # 每 5 分鐘
+                    self.line.push_text(
+                        f"⏱️ 分類進行中 {completed[0]}/{total}，請稍候...",
+                        to_user_id=user_id
+                    )
 
-                if i % 10 == 0 or i == total:
-                    progress = f"📊 進度 {i}/{total}（✅{success} ⚠️{failed}）\n" + "\n".join(batch_log)
-                    self.line.push_text(progress, to_user_id=user_id)
-                    batch_log = []
+            timer_thread = threading.Thread(target=timer_reporter, daemon=True)
+            timer_thread.start()
 
-            self.line.push_text(
-                f"🎉 聯絡人整理完成！\n共處理 {total} 筆，成功 {success} 筆，失敗 {failed} 筆。",
-                to_user_id=user_id
-            )
+            try:
+                for i, c in enumerate(contacts):
+                    try:
+                        label = self.llm.classify_contact_label(
+                            name=c['name'],
+                            company=c['company'],
+                            job_title=c['job_title'],
+                            email=c.get('email', ''),
+                        )
+                    except Exception as e:
+                        logger.warning(f"分類失敗 ({c['name']}): {e}")
+                        label = '其他'
+
+                    pending[label].append(c['resourceName'])
+
+                    # 同標籤滿 10 筆立即批次寫入
+                    if len(pending[label]) >= 10:
+                        batch = pending[label][:10]
+                        pending[label] = pending[label][10:]
+                        ok = batch_assign_label(self.people, batch, label, label_cache)
+                        if ok:
+                            success += len(batch)
+                            summary_count[label] += len(batch)
+                        else:
+                            failed += len(batch)
+
+                    completed[0] = i + 1
+            finally:
+                stop_event.set()
+                timer_thread.join(timeout=1)
+
+            # 寫入各標籤剩餘尾數
+            for label, resource_names in pending.items():
+                if resource_names:
+                    ok = batch_assign_label(self.people, resource_names, label, label_cache)
+                    if ok:
+                        success += len(resource_names)
+                        summary_count[label] += len(resource_names)
+                    else:
+                        failed += len(resource_names)
+
+            # 最終摘要
+            summary_lines = [
+                f"🎉 聯絡人整理完成！共處理 {total} 筆，成功 {success} 筆，失敗 {failed} 筆。",
+                "",
+                "📊 分類結果："
+            ]
+            for label in CONTACT_LABELS:
+                count = summary_count.get(label, 0)
+                if count:
+                    summary_lines.append(f"  🏷️ {label}：{count} 人")
+
+            self.line.push_text("\n".join(summary_lines), to_user_id=user_id)
 
         except Exception as e:
             logger.error(f"整理聯絡人失敗: {e}", exc_info=True)

@@ -34,7 +34,7 @@ print("Step 2: Build Docker image...")
 subprocess.run(f"gcloud builds submit --tag {image} --project {project}", shell=True, check=True)
 
 print("Step 3: Deploy to Cloud Run...")
-subprocess.run(f"gcloud run deploy {service} --image {image} --region {region} --allow-unauthenticated --env-vars-file {env_file} --project {project}", shell=True, check=True)
+subprocess.run(f"gcloud run deploy {service} --image {image} --region {region} --allow-unauthenticated --env-vars-file {env_file} --project {project} --min-instances 1 --timeout 3600", shell=True, check=True)
 
 if os.path.exists(env_file):
     os.remove(env_file)

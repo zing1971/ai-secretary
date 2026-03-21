@@ -15,23 +15,50 @@ CONTACT_LABELS = [
 CONTACT_GROUPS = CONTACT_LABELS
 
 
-def _ensure_label(service, label_name: str) -> str | None:
+def build_label_cache(service) -> dict:
+    """一次性取得所有使用者自訂標籤，返回 {label_name: resourceName} 快取字典。
+    用於批次作業前的預熱，避免每筆聯絡人都重複呼叫 contactGroups().list()。
+    """
+    cache = {}
+    try:
+        result = service.contactGroups().list(pageSize=200).execute()
+        for group in result.get('contactGroups', []):
+            if group.get('groupType') == 'USER_CONTACT_GROUP':
+                cache[group['name']] = group['resourceName']
+        logger.info(f"📦 標籤快取建立完成，共 {len(cache)} 個標籤")
+    except Exception as e:
+        logger.error(f"建立標籤快取失敗: {e}")
+    return cache
+
+
+def _ensure_label(service, label_name: str, cache: dict = None) -> str | None:
     """確保指定標籤（Contact Group）存在，不存在則建立。
+    Args:
+        cache: 預先建立的標籤快取 dict（{name: resourceName}），有傳入則優先命中，
+               避免每次都呼叫 contactGroups().list()。
     Returns:
         標籤的 resourceName，失敗時回傳 None
     """
+    if cache is not None and label_name in cache:
+        return cache[label_name]
+
     try:
         result = service.contactGroups().list(pageSize=200).execute()
         for group in result.get('contactGroups', []):
             if (group.get('groupType') == 'USER_CONTACT_GROUP'
                     and group.get('name') == label_name):
-                return group['resourceName']
+                rn = group['resourceName']
+                if cache is not None:
+                    cache[label_name] = rn
+                return rn
 
         new_group = service.contactGroups().create(
             body={'contactGroup': {'name': label_name}}
         ).execute()
         resource_name = new_group.get('resourceName')
         logger.info(f"✅ 建立新標籤: {label_name} ({resource_name})")
+        if cache is not None:
+            cache[label_name] = resource_name
         return resource_name
 
     except Exception as e:
@@ -53,15 +80,40 @@ def _add_to_label(service, contact_resource_name: str, group_resource_name: str)
         return False
 
 
-def assign_label_to_contact(service, contact_resource_name: str, label_name: str) -> bool:
+def assign_label_to_contact(service, contact_resource_name: str, label_name: str,
+                             cache: dict = None) -> bool:
     """確保標籤存在並將聯絡人加入該標籤。
     Returns:
         成功回傳 True，失敗回傳 False
     """
-    group_rn = _ensure_label(service, label_name)
+    group_rn = _ensure_label(service, label_name, cache)
     if not group_rn:
         return False
     return _add_to_label(service, contact_resource_name, group_rn)
+
+
+def batch_assign_label(service, contact_resource_names: list, label_name: str,
+                       cache: dict = None) -> bool:
+    """將多筆聯絡人批次加入同一標籤，一次 API 呼叫。
+    相較於逐筆呼叫，N 筆同標籤聯絡人從 N 次 modify 降為 1 次。
+    Returns:
+        成功回傳 True，失敗回傳 False
+    """
+    if not contact_resource_names:
+        return True
+    group_rn = _ensure_label(service, label_name, cache)
+    if not group_rn:
+        return False
+    try:
+        service.contactGroups().members().modify(
+            resourceName=group_rn,
+            body={'resourceNamesToAdd': contact_resource_names}
+        ).execute()
+        logger.info(f"🏷️ 批次寫入標籤 [{label_name}]：{len(contact_resource_names)} 筆")
+        return True
+    except Exception as e:
+        logger.error(f"批次加入標籤失敗 ({label_name}): {e}")
+        return False
 
 
 def create_contact(service, name: str, company: str, job_title: str,
@@ -182,6 +234,7 @@ def get_unlabeled_contacts(service) -> list[dict]:
         return []
 
 
-def update_contact_label(service, resource_name: str, _etag: str, label: str) -> bool:
+def update_contact_label(service, resource_name: str, _etag: str, label: str,
+                         cache: dict = None) -> bool:
     """將聯絡人加入指定標籤（Contact Group）。_etag 參數保留供向後相容，不使用。"""
-    return assign_label_to_contact(service, resource_name, label)
+    return assign_label_to_contact(service, resource_name, label, cache)

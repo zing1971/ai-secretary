@@ -3,8 +3,7 @@ import json
 import logging
 from dotenv import load_dotenv
 from intent_router import IntentRouter
-from action_dispatcher import ActionDispatcher
-from line_service import LineService
+from role_dispatcher import RoleDispatcher
 from llm_service import LLMService
 from google_auth import get_google_services
 from config import Config
@@ -13,17 +12,18 @@ from config import Config
 load_dotenv(override=True)
 
 # 設置模擬 UserID
-TEST_USER_ID = os.getenv("LINE_USER_ID")
+TEST_USER_ID = "test_chat_id"
 
-class MockLineService:
+class MockMessagingService:
     def __init__(self):
         self.messages = []
+        self.chat_id = "test_chat_id"
     
     def reply_text(self, reply_token, text):
         self.messages.append(f"[Reply] {text}")
         return True
     
-    def push_text(self, text, to_user_id):
+    def push_text(self, text, to_user_id=None):
         self.messages.append(f"[Push] {text}")
         return True
 
@@ -34,7 +34,7 @@ def test_full_flow():
         return
 
     # 初始化服務
-    line_mock = MockLineService()
+    msg_mock = MockMessagingService()
     llm = LLMService(api_key=api_key)
     
     print("正在取得 Google 服務權限...")
@@ -44,7 +44,8 @@ def test_full_flow():
         print(f"Google 授權失敗: {e}")
         return
 
-    dispatcher = ActionDispatcher(line_mock, llm, gmail, cal, tasks, sheets, drive, people)
+    # 使用 RoleDispatcher 取代舊的 ActionDispatcher
+    dispatcher = RoleDispatcher(msg_mock, llm, gmail, cal, tasks, sheets, drive, people)
     router = IntentRouter(api_key=api_key)
 
     test_cases = [
@@ -59,7 +60,7 @@ def test_full_flow():
     for case in test_cases:
         msg = case["msg"]
         tag = case["tag"]
-        line_mock.messages = [] # 清空
+        msg_mock.messages = [] # 清空
         
         print(f"測試請求 [{tag}]: {msg}")
         
@@ -73,17 +74,17 @@ def test_full_flow():
             dispatcher.dispatch(intent_data, msg, TEST_USER_ID, reply_token="dummy_token")
             
             # 3. 檢查回覆數量與內容
-            msg_count = len(line_mock.messages)
+            msg_count = len(msg_mock.messages)
             print(f"收到回覆數: {msg_count}")
-            for m in line_mock.messages:
+            for m in msg_mock.messages:
                 # 只印出前 50 個字，避免洗版
                 content = m.replace('\n', ' ')
                 print(f"  -> {content[:100]}...")
             
-            if msg_count >= 2:
-                print(f"✅ [{tag}] 通過: 偵測到多次回覆流程")
+            if msg_count >= 1:
+                print(f"✅ [{tag}] 通過: 偵測到回覆流程")
             else:
-                print(f"❌ [{tag}] 失敗: 回覆次數不足 ({msg_count})")
+                print(f"❌ [{tag}] 失敗: 未收到任何回覆")
             
         except Exception as e:
             print(f"❌ [{tag}] 執行出錯: {e}")

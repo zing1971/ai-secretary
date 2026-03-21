@@ -11,13 +11,13 @@ import logging
 logger = logging.getLogger("AI-Secretary")
 
 
-def execute_morning_briefing(dispatcher, line_service):
+def execute_morning_briefing(dispatcher, messaging_service):
     """
     執行早安簡報的核心邏輯。
     
     Args:
-        dispatcher: ActionDispatcher 實例
-        line_service: LineService 實例
+        dispatcher: RoleDispatcher 實例
+        messaging_service: TelegramService 或 LineService 實例
     
     Returns:
         str: 簡報內容
@@ -25,7 +25,7 @@ def execute_morning_briefing(dispatcher, line_service):
     try:
         report = dispatcher.handle_proactive_process()
         push_msg = f"🌅 【早安簡報】\n{report}"
-        line_service.push_text(push_msg)
+        messaging_service.push_text(push_msg)
         logger.info("✅ 早安簡報推送成功！")
         return push_msg
     except Exception as e:

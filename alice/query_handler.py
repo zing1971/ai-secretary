@@ -29,9 +29,9 @@ class AliceQueryHandler:
         "Visual_Assistant",
     }
 
-    def __init__(self, line_service, llm_service, gmail, calendar, tasks,
+    def __init__(self, messaging_service, llm_service, gmail, calendar, tasks,
                  memory_service, notebooklm_service, drive_service_wrapper=None):
-        self.line = line_service
+        self.line = messaging_service
         self.llm = llm_service
         self.gmail = gmail
         self.calendar = calendar

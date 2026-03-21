@@ -9,6 +9,8 @@
                                   ├── ClarifyHandler（歧義攔截）
                                   ├── Alice（查詢/檢索/閒聊）
                                   └── Birdie（執行/變更/排程）
+
+支援 TelegramService 與 LineService（相容介面），不需明確引入即可互換。
 """
 import logging
 
@@ -17,7 +19,6 @@ from birdie.action_handler import BirdieActionHandler
 from shared.clarify_handler import ClarifyHandler
 from shared.line_responder import send_response
 
-from line_service import LineService
 from llm_service import LLMService
 from memory_service import MemoryService
 from pinecone_memory import PineconeMemory
@@ -34,11 +35,13 @@ class RoleDispatcher:
 
     初始化時建立 Alice 與 Birdie 兩個角色 Handler，
     dispatch() 方法根據意圖自動選擇角色處理。
+
+    messaging_service 接受 TelegramService 或 LineService（相容介面）。
     """
 
-    def __init__(self, line_service: LineService, llm_service: LLMService,
+    def __init__(self, messaging_service, llm_service: LLMService,
                  gmail, calendar, tasks, sheets, drive=None, people=None):
-        self.line = line_service
+        self.line = messaging_service  # 保留屬性名稱以相容 Alice/Birdie 內部呼叫
         self.llm = llm_service
 
         # 初始化 NotebookLM 與記憶服務（共用）
@@ -58,7 +61,7 @@ class RoleDispatcher:
 
         # ===== 建立雙角色 =====
         self.alice = AliceQueryHandler(
-            line_service=line_service,
+            messaging_service=messaging_service,
             llm_service=llm_service,
             gmail=gmail,
             calendar=calendar,
@@ -69,7 +72,7 @@ class RoleDispatcher:
         )
 
         self.birdie = BirdieActionHandler(
-            line_service=line_service,
+            messaging_service=messaging_service,
             llm_service=llm_service,
             gmail=gmail,
             calendar=calendar,

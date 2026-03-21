@@ -48,6 +48,11 @@ def _clean_api_key(api_key: str) -> str:
 
 
 class Config:
+    # ── Telegram ─────────────────────────────────────────────────
+    TELEGRAM_BOT_TOKEN = _get_env("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_ID   = _get_env("TELEGRAM_CHAT_ID", "")
+
+    # ── (舊) LINE — 保留供回溯比對；已不再主動使用 ─────────────────
     LINE_CHANNEL_ACCESS_TOKEN = _get_env("LINE_CHANNEL_ACCESS_TOKEN", "")
     LINE_CHANNEL_SECRET = _get_env("LINE_CHANNEL_SECRET", "")
     LINE_USER_ID = _get_env("LINE_USER_ID", "")
@@ -67,12 +72,10 @@ class Config:
     def validate(cls):
         """驗證環境變數，但絕不在 import 時呼叫 sys.exit"""
         missing = []
-        if not cls.LINE_CHANNEL_ACCESS_TOKEN:
-            missing.append("LINE_CHANNEL_ACCESS_TOKEN")
-        if not cls.LINE_CHANNEL_SECRET:
-            missing.append("LINE_CHANNEL_SECRET")
-        if not cls.LINE_USER_ID:
-            missing.append("LINE_USER_ID")
+        if not cls.TELEGRAM_BOT_TOKEN:
+            missing.append("TELEGRAM_BOT_TOKEN")
+        if not cls.TELEGRAM_CHAT_ID:
+            missing.append("TELEGRAM_CHAT_ID")
         if not cls.GEMINI_API_KEY:
             missing.append("GEMINI_API_KEY")
         if not cls.GOOGLE_SHEET_ID:
