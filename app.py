@@ -259,6 +259,8 @@ async def setup_webhook(request: Request):
     import requests as req
 
     host = str(request.base_url).rstrip("/")
+    if "http://" in host and ".run.app" in host:
+        host = host.replace("http://", "https://")
     webhook_url = f"{host}/webhook"
 
     resp = req.post(

@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-with open('.env') as f:
+with open('.env', encoding='utf-8') as f:
     lines = f.readlines()
 
 env_file = 'env_vars.yaml'
