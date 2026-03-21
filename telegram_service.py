@@ -82,19 +82,19 @@ class TelegramService:
             "inline_keyboard": [
                 [
                     {"text": "📊 今日總覽", "callback_data": "今天摘要"},
-                    {"text": "📅 行程安排", "callback_data": "查詢我未來2天的工作安排，提醒需要準備的事項"},
+                    {"text": "📅 行程安排", "callback_data": "未來兩天行程"},
                 ],
                 [
-                    {"text": "✅ 待辦事項", "callback_data": "列出所有待辦事項，依緊急程度排序"},
-                    {"text": "📧 郵件處理", "callback_data": "摘要最新15封郵件重點，標註需要回覆的信"},
+                    {"text": "✅ 待辦事項", "callback_data": "列出待辦事項"},
+                    {"text": "📧 郵件處理", "callback_data": "摘要最新信件"},
                 ],
                 [
-                    {"text": "📚 知識搜尋", "callback_data": "查詢資安知識庫，整理最新威脅情報與防護建議"},
-                    {"text": "⚙️ 系統設定", "callback_data": "告訴我你們目前知道關於我的所有偏好設定和重要備忘"},
+                    {"text": "📚 知識搜尋", "callback_data": "查詢資安知識庫"},
+                    {"text": "⚙️ 系統設定", "callback_data": "查詢我的偏好設定與備忘"},
                 ],
                 [
-                    {"text": "👥 整理聯絡人", "callback_data": "整理聯絡人"},
-                    {"text": "☁️ 整理雲端", "callback_data": "整理雲端，分析目錄結構並提出分類建議"},
+                    {"text": "👥 整理聯絡人", "callback_data": "幫聯絡人貼標籤"},
+                    {"text": "☁️ 整理雲端", "callback_data": "整理雲端"},
                 ],
             ]
         }
