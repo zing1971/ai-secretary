@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gcloud run:*)",
+      "Bash(gcloud logging:*)",
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\Google\\\\Cloud SDK\\\\google-cloud-sdk\\\\bin\\\\gcloud.cmd\" logging read \"resource.type=cloud_run_revision AND resource.labels.service_name=ai-secretary\" --limit=80 --format=\"table\\(timestamp,textPayload\\)\" --project=gen-lang-client-0741928971)",
+      "Bash(powershell -Command \"& ''''C:\\\\Program Files \\(x86\\)\\\\Google\\\\Cloud SDK\\\\google-cloud-sdk\\\\bin\\\\gcloud.cmd'''' logging read ''''resource.type=cloud_run_revision AND resource.labels.service_name=ai-secretary'''' --limit=60 --format=json --project=gen-lang-client-0741928971\")",
+      "Bash(python -c \"import sys,json; logs=json.load\\(sys.stdin\\); [print\\(l.get\\(''''timestamp'''',''''''''\\)[:19], l.get\\(''''textPayload'''',''''''''\\)[:200]\\) for l in reversed\\(logs\\) if l.get\\(''''textPayload'''',''''''''\\).strip\\(\\)]\")",
+      "Bash(powershell -Command \"& ''''C:\\\\Program Files \\(x86\\)\\\\Google\\\\Cloud SDK\\\\google-cloud-sdk\\\\bin\\\\gcloud.cmd'''' logging read ''''resource.type=cloud_run_revision AND resource.labels.service_name=ai-secretary'''' --limit=200 --format=json --project=gen-lang-client-0741928971\")",
+      "Bash(python -c \":*)",
+      "Bash(python -c \"from google_auth import get_google_services; print\\(type\\(get_google_services\\(\\)\\)\\); r=get_google_services\\(\\); print\\(r if not isinstance\\(r, tuple\\) else [type\\(x\\).__name__ for x in r]\\)\")"
+    ]
+  }
+}

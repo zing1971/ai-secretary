@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"C:\\\\Users\\\\zing\\\\.claude\\\\projects\\\\c--Users-zing--gemini-antigravity-playground-ai-secretary\\\\memory\"\" 2>/dev/null || echo \"empty \")",
+      "Bash(python -c \":*)",
+      "Bash(python do_deploy.py)"
+    ]
+  }
+}
