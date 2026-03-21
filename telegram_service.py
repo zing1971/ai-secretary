@@ -31,19 +31,19 @@ class TelegramService:
         """與 LineService.user_id 相容 — 回傳主要使用者的 chat_id"""
         return self.chat_id
 
-    def push_text(self, text: str, to_user_id: str = None) -> bool:
+    def push_text(self, text: str, to_user_id: str = None, reply_markup: dict = None) -> bool:
         """主動推送純文字訊息（push message）"""
         target = to_user_id or self.chat_id
-        return self._send_message(target, text)
+        return self._send_message(target, text, reply_markup=reply_markup)
 
-    def reply_text(self, reply_token: str, text: str) -> bool:
+    def reply_text(self, reply_token: str, text: str, reply_markup: dict = None) -> bool:
         """
         回覆訊息。
         Telegram 無 reply_token 機制，此處 reply_token 傳入的是 chat_id。
         呼叫端（app.py handle_message）會把 update.effective_chat.id 當 reply_token 傳入。
         """
         chat_id = reply_token or self.chat_id
-        return self._send_message(chat_id, text)
+        return self._send_message(chat_id, text, reply_markup=reply_markup)
 
     def get_message_content(self, file_id: str) -> bytes:
         """
@@ -74,36 +74,52 @@ class TelegramService:
 
     def send_main_menu(self, chat_id: str = None) -> bool:
         """
-        傳送互動式 Inline Keyboard 主選單（取代 Line Rich Menu）。
-        4 欄 × 3 列，共 12 個快捷按鈕，對應 Alice + Birdie 功能。
+        傳送互動式 Inline Keyboard 主選單。
+        2 欄 × 3 列，共 6 個快捷按鈕。
         """
         target = chat_id or self.chat_id
         keyboard = {
             "inline_keyboard": [
-                # Row 0 ── Alice 查詢
                 [
-                    {"text": "📅 行程查詢", "callback_data": "查詢我未來2天的工作安排，提醒需要準備的事項"},
-                    {"text": "📧 信件摘要", "callback_data": "摘要最新15封郵件重點，標註需要回覆的信"},
-                    {"text": "📊 今日簡報", "callback_data": "今天摘要"},
-                    {"text": "✍️ 智慧擬稿", "callback_data": "檢查最新郵件，挑出需要答覆的信協助草擬"},
+                    {"text": "📊 今日總覽", "callback_data": "今天摘要"},
+                    {"text": "📅 行程安排", "callback_data": "查詢我未來2天的工作安排，提醒需要準備的事項"},
                 ],
-                # Row 1 ── Alice 搜尋 + Birdie 執行
-                [
-                    {"text": "🌐 網路搜尋", "callback_data": "上網搜尋今天的科技產業與資安重要新聞"},
-                    {"text": "📚 知識庫", "callback_data": "查詢資安知識庫，整理最新威脅情報與防護建議"},
-                    {"text": "☁️ 整理雲端", "callback_data": "整理雲端，分析目錄結構並提出分類建議"},
-                    {"text": "📸 視覺處理", "callback_data": "我要傳照片給你辨識處理"},
-                ],
-                # Row 2 ── Alice 查詢 + 共用
                 [
                     {"text": "✅ 待辦事項", "callback_data": "列出所有待辦事項，依緊急程度排序"},
-                    {"text": "🔍 搜尋檔案", "callback_data": "搜尋雲端硬碟本週更新的檔案清單"},
-                    {"text": "🧠 記憶管理", "callback_data": "告訴我你們目前知道關於我的所有偏好設定和重要備忘"},
-                    {"text": "💬 與我閒聊", "callback_data": "你好，簡要說明你們各自能提供的服務項目"},
+                    {"text": "📧 郵件處理", "callback_data": "摘要最新15封郵件重點，標註需要回覆的信"},
+                ],
+                [
+                    {"text": "📚 知識搜尋", "callback_data": "查詢資安知識庫，整理最新威脅情報與防護建議"},
+                    {"text": "⚙️ 系統設定", "callback_data": "告訴我你們目前知道關於我的所有偏好設定和重要備忘"},
+                ],
+                [
+                    {"text": "👥 整理聯絡人", "callback_data": "整理聯絡人"},
+                    {"text": "☁️ 整理雲端", "callback_data": "整理雲端，分析目錄結構並提出分類建議"},
                 ],
             ]
         }
-        return self._send_message(target, "📋 AI 秘書選單", reply_markup=keyboard)
+        return self._send_message(target, "📋 AI 秘書主選單", reply_markup=keyboard)
+
+    def send_context_menu(self, context_type: str, chat_id: str = None) -> bool:
+        """傳送特定情境的快捷選單"""
+        target = chat_id or self.chat_id
+        keyboard = None
+        text = ""
+
+        if context_type == "morning_briefing":
+            keyboard = {
+                "inline_keyboard": [
+                    [
+                        {"text": "✏️ 幫我起草重要回信", "callback_data": "幫我起草今天重要信件的回覆"},
+                        {"text": "📝 記錄至待辦事項", "callback_data": "把簡報中的重點加入待辦清單"},
+                    ]
+                ]
+            }
+            text = "💡 請問需要為您執行哪些後續動作？"
+
+        if keyboard and text:
+            return self._send_message(target, text, reply_markup=keyboard)
+        return False
 
     # ── 內部工具 ──────────────────────────────────────────────────────────────
 

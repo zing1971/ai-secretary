@@ -26,6 +26,11 @@ def execute_morning_briefing(dispatcher, messaging_service):
         report = dispatcher.handle_proactive_process()
         push_msg = f"🌅 【早安簡報】\n{report}"
         messaging_service.push_text(push_msg)
+        
+        # 傳送早安簡報情境選單 (若服務端支援)
+        if hasattr(messaging_service, 'send_context_menu'):
+            messaging_service.send_context_menu("morning_briefing")
+            
         logger.info("✅ 早安簡報推送成功！")
         return push_msg
     except Exception as e:

@@ -142,6 +142,8 @@ async def _handle_update(update: dict):
                     report = S.dispatcher.handle_proactive_process()
                     push_msg = f"🌅 仁哥早安！以下是 Alice 為您準備的簡報：\n{report}"
                     S.tg_service.reply_text(reply_token, push_msg)
+                    if hasattr(S.tg_service, 'send_context_menu'):
+                        S.tg_service.send_context_menu("morning_briefing")
                 except Exception as e:
                     S.tg_service.reply_text(reply_token, f"仁哥抱歉，Alice 執行簡報時遇到問題：{e} 🙇‍♀️")
                 return
@@ -201,6 +203,8 @@ async def trigger_briefing(request: Request):
         report = S.dispatcher.handle_proactive_process()
         push_msg = f"🌅 仁哥早安！以下是 Alice 為您準備的今日簡報：\n{report}"
         S.tg_service.push_text(push_msg)
+        if hasattr(S.tg_service, 'send_context_menu'):
+            S.tg_service.send_context_menu("morning_briefing")
         logger.info("✅ 早安簡報推送成功！")
         return JSONResponse(content={"status": "ok", "message": "簡報已推送"})
     except Exception as e:
@@ -217,6 +221,8 @@ async def trigger_briefing_get():
         report = S.dispatcher.handle_proactive_process()
         push_msg = f"🌅 仁哥早安！以下是 Alice 為您準備的今日簡報：\n{report}"
         S.tg_service.push_text(push_msg)
+        if hasattr(S.tg_service, 'send_context_menu'):
+            S.tg_service.send_context_menu("morning_briefing")
         return JSONResponse(content={"status": "ok", "message": "簡報已推送"})
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
