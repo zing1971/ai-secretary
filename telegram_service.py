@@ -86,11 +86,11 @@ class TelegramService:
                 ],
                 [
                     {"text": "✅ 待辦事項", "callback_data": "列出待辦事項"},
-                    {"text": "📧 郵件處理", "callback_data": "摘要最新信件"},
+                    {"text": "📧 郵件中心", "callback_data": "進入郵件處理中心"},
                 ],
                 [
-                    {"text": "📚 知識搜尋", "callback_data": "查詢資安知識庫"},
-                    {"text": "⚙️ 系統設定", "callback_data": "查詢我的偏好設定與備忘"},
+                    {"text": "📚 知識搜尋", "callback_data": "開啟專業知識庫"},
+                    {"text": "⚙️ 系統設定", "callback_data": "查看個人偏好與設定"},
                 ],
                 [
                     {"text": "👥 整理聯絡人", "callback_data": "幫聯絡人貼標籤"},
@@ -120,6 +120,57 @@ class TelegramService:
         if keyboard and text:
             return self._send_message(target, text, reply_markup=keyboard)
         return False
+
+    def send_email_menu(self, chat_id: str = None) -> bool:
+        """傳送郵件中心功能選單"""
+        target = chat_id or self.chat_id
+        keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "📊 摘要重要信件", "callback_data": "幫我挑三到五封重要信件摘要"},
+                    {"text": "🔍 搜尋特定信件", "callback_data": "我要找信件"}
+                ],
+                [
+                    {"text": "✏️ 我想草擬回信", "callback_data": "幫我草擬回信"},
+                    {"text": "🔙 返回主選單", "callback_data": "menu"}
+                ]
+            ]
+        }
+        return self._send_message(target, "📧 【郵件中心】\n仁哥，請問您想如何處理電子郵件？", reply_markup=keyboard)
+
+    def send_knowledge_menu(self, chat_id: str = None) -> bool:
+        """傳送知識庫導引選單"""
+        target = chat_id or self.chat_id
+        keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "🛡️ 資安防護", "callback_data": "資安專業知識查詢"},
+                    {"text": "💻 資訊技術", "callback_data": "IT技術架構查詢"}
+                ],
+                [
+                    {"text": "📈 科技趨勢", "callback_data": "最新科技趨勢分析"},
+                    {"text": "🌐 外部搜尋", "callback_data": "上網搜尋相關資訊"}
+                ]
+            ]
+        }
+        return self._send_message(target, "📚 【專業知識庫】\n仁哥，請問您想查詢哪個領域的知識？或是需要 Alice 上網幫您查證最新的國內外情資呢？", reply_markup=keyboard)
+
+    def send_settings_menu(self, memories_summary: str, chat_id: str = None) -> bool:
+        """傳送系統與偏好設定選單"""
+        target = chat_id or self.chat_id
+        keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "📝 新增個人備忘", "callback_data": "記住我的新偏好"},
+                    {"text": "🔄 重寫偏好摘要", "callback_data": "總結目前我記住的事情"}
+                ],
+                [
+                    {"text": "🔙 返回主選單", "callback_data": "menu"}
+                ]
+            ]
+        }
+        text = f"⚙️ 【系統設定與個人化記憶】\n目前 Alice 腦袋裡的「仁哥檔案」：\n\n{memories_summary}\n\n請問需要協助更新或調整哪一部分嗎？"
+        return self._send_message(target, text, reply_markup=keyboard)
 
     # ── 內部工具 ──────────────────────────────────────────────────────────────
 

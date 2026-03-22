@@ -317,6 +317,12 @@ class LLMService:
             logger.error(f"Keyword extraction failed: {e}")
             return []
 
+    def generate_report(self, events: list, emails: list, system_prompt: str) -> str:
+        """主動匯報模式 (CLI/Legacy)"""
+        # 其實就是 analyze_for_actions 的簡化版，回傳純文字敘述
+        res = self.analyze_for_actions(events, emails)
+        return res.get('briefing', '今日無重大事項。')
+
     def analyze_for_actions(self, events, emails):
         """分析行程與信件，萃取 JSON 格式的待辦事項與草稿建議。"""
         current_time = _get_current_time_str()

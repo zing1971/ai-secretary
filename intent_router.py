@@ -21,6 +21,7 @@ class IntentRouter:
         "Organize_Contacts": ["整理聯絡人", "聯絡人分類", "幫聯絡人貼標籤", "整理通訊錄"],
         "Proactive_Process": ["今日簡報", "今日簡報摘要", "每日簡報", "今天摘要", "日報"],
         "Search_Web":        ["上網搜尋", "上網查", "搜尋新聞", "查新聞"],
+        "Query_Project_Advisor": ["資安", "知識庫", "專業知識", "IT建議", "趨勢分析"],
         "Query_Tasks":       ["待辦", "todo", "任務清單", "待辦事項"],
     }
     CHAT_PATTERNS = ["早安", "午安", "晚安", "謝謝", "你好", "嗨", "哈囉",

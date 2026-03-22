@@ -139,12 +139,17 @@ async def _handle_update(update: dict):
             # 手動測試簡報指令
             if user_message == "測試排程":
                 try:
-                    report = S.dispatcher.handle_proactive_process()
+                    S.tg_service.reply_text(reply_token, "⏳ Alice 正在為您撰寫今日簡報分析，請稍候片刻... ☕")
+                    # 使用 to_thread 避免阻塞 event loop
+                    report = await asyncio.to_thread(S.dispatcher.handle_proactive_process)
                     push_msg = f"🌅 仁哥早安！以下是 Alice 為您準備的簡報：\n{report}"
                     S.tg_service.reply_text(reply_token, push_msg)
                     if hasattr(S.tg_service, 'send_context_menu'):
                         S.tg_service.send_context_menu("morning_briefing")
+                except BrokenPipeError:
+                    logger.warning("偵測到 Broken pipe，可能是控制台已關閉或連線中斷，跳過通報。")
                 except Exception as e:
+                    logger.error(f"簡報測試發生異常: {e}", exc_info=True)
                     S.tg_service.reply_text(reply_token, f"仁哥抱歉，Alice 執行簡報時遇到問題：{e} 🙇‍♀️")
                 return
 
@@ -200,32 +205,25 @@ async def trigger_briefing(request: Request):
     if not S.ready or not S.dispatcher:
         return JSONResponse(status_code=503, content={"status": "error", "message": "服務尚未就緒"})
     try:
-        report = S.dispatcher.handle_proactive_process()
+        S.tg_service.push_text("⏳ 每日例行簡報任務已由排程器啟動...")
+        report = await asyncio.to_thread(S.dispatcher.handle_proactive_process)
         push_msg = f"🌅 仁哥早安！以下是 Alice 為您準備的今日簡報：\n{report}"
         S.tg_service.push_text(push_msg)
         if hasattr(S.tg_service, 'send_context_menu'):
             S.tg_service.send_context_menu("morning_briefing")
         logger.info("✅ 早安簡報推送成功！")
         return JSONResponse(content={"status": "ok", "message": "簡報已推送"})
+    except BrokenPipeError:
+        return JSONResponse(status_code=500, content={"status": "error", "message": "Broken pipe detected"})
     except Exception as e:
         logger.error(f"❌ 簡報執行失敗: {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
 @app.get("/trigger-briefing")
-async def trigger_briefing_get():
+async def trigger_briefing_get(request: Request):
     """GET 方法用於手動測試"""
-    if not S.ready or not S.dispatcher:
-        return JSONResponse(status_code=503, content={"status": "error", "message": "服務尚未就緒"})
-    try:
-        report = S.dispatcher.handle_proactive_process()
-        push_msg = f"🌅 仁哥早安！以下是 Alice 為您準備的今日簡報：\n{report}"
-        S.tg_service.push_text(push_msg)
-        if hasattr(S.tg_service, 'send_context_menu'):
-            S.tg_service.send_context_menu("morning_briefing")
-        return JSONResponse(content={"status": "ok", "message": "簡報已推送"})
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+    return await trigger_briefing(request)
 
 
 @app.post("/trigger-drive-organize")

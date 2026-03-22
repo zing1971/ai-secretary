@@ -26,7 +26,7 @@ class AliceQueryHandler:
     HANDLED_INTENTS = {
         "Chat", "Query_Email", "Query_Calendar", "Search_Drive",
         "Query_Project_Advisor", "Search_Web", "Query_Tasks",
-        "Visual_Assistant",
+        "Visual_Assistant", "Memory_Update",
     }
 
     def __init__(self, messaging_service, llm_service, gmail, calendar, tasks,
@@ -64,6 +64,10 @@ class AliceQueryHandler:
                 self._handle_chat(user_msg, user_id, reply_token)
 
             elif intent == "Query_Email":
+                if user_msg == "進入郵件處理中心":
+                    if hasattr(self.line, 'send_email_menu'):
+                        self.line.send_email_menu(user_id)
+                    return
                 self._handle_email_query(intent_data, user_msg, user_id, reply_token)
 
             elif intent == "Query_Calendar":
@@ -73,7 +77,21 @@ class AliceQueryHandler:
                 self._handle_drive_search(intent_data, user_msg, user_id, reply_token)
 
             elif intent == "Query_Project_Advisor":
+                if user_msg == "開啟專業知識庫":
+                    if hasattr(self.line, 'send_knowledge_menu'):
+                        self.line.send_knowledge_menu(user_id)
+                    return
                 self._handle_knowledge_query(intent_data, user_msg, user_id, reply_token)
+
+            elif intent == "Memory_Update":
+                if user_msg == "查看個人偏好與設定":
+                    memories = self.memory.fetch_relevant_memories("仁哥的個人背景與偏好摘要")
+                    if hasattr(self.line, 'send_settings_menu'):
+                        self.line.send_settings_menu(memories, user_id)
+                    return
+                # 一般記憶更新流程（可交由 Birdie）
+                if self._handoff_fn:
+                    self._handoff_fn(intent_data, user_msg, user_id, reply_token)
 
             elif intent == "Search_Web":
                 self._handle_web_search(intent_data, user_msg, user_id, reply_token)
