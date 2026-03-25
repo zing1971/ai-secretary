@@ -34,7 +34,7 @@ class BirdieActionHandler:
     }
 
     def __init__(self, messaging_service, llm_service, gmail, calendar, tasks, sheets,
-                 memory_service, drive_organizer=None, people=None):
+                 memory_service, drive_organizer=None, people=None, creds=None):
         self.line = messaging_service
         self.llm = llm_service
         self.gmail = gmail
@@ -44,6 +44,7 @@ class BirdieActionHandler:
         self.memory = memory_service
         self.drive_organizer = drive_organizer
         self.people = people
+        self.creds = creds
 
     def can_handle(self, intent: str) -> bool:
         return intent in self.HANDLED_INTENTS
@@ -320,7 +321,13 @@ class BirdieActionHandler:
 
     def handle_proactive_process(self) -> str:
         """執行主動處理邏輯並回傳報告字串"""
-        if not all([self.gmail, self.calendar, self.tasks]):
+        # 執行緒安全處理：如果在背景執行緒執行，應使用獨立的服務物件
+        from googleapiclient.discovery import build
+        gmail_svc = build('gmail', 'v1', credentials=self.creds) if self.creds else self.gmail
+        cal_svc = build('calendar', 'v3', credentials=self.creds) if self.creds else self.calendar
+        task_svc = build('tasks', 'v1', credentials=self.creds) if self.creds else self.tasks
+
+        if not all([gmail_svc, cal_svc, task_svc]):
             return "仁哥抱歉，Google 服務授權不完整，Birdie 暫時無法處理主動任務 🙇‍♀️"
 
         try:
@@ -333,19 +340,19 @@ class BirdieActionHandler:
             start_utc = now.replace(hour=0, minute=0, second=0).astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
             end_utc = (now + datetime.timedelta(days=1)).replace(hour=23, minute=59, second=59).astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
 
-            events = get_events(self.calendar, start_utc, end_utc)
-            emails = get_recent_emails(self.gmail)
+            events = get_events(cal_svc, start_utc, end_utc)
+            emails = get_recent_emails(gmail_svc)
 
             action_data = self.llm.analyze_for_actions(events, emails)
 
             tasks_created = 0
             for t in action_data.get('tasks', []):
-                create_google_task(self.tasks, t.get('title'), t.get('notes'), t.get('due'))
+                create_google_task(task_svc, t.get('title'), t.get('notes'), t.get('due'))
                 tasks_created += 1
 
             drafts_created = 0
             for d in action_data.get('drafts', []):
-                create_gmail_draft(self.gmail, d.get('to'), d.get('subject'), d.get('body'), d.get('threadId'))
+                create_gmail_draft(gmail_svc, d.get('to'), d.get('subject'), d.get('body'), d.get('threadId'))
                 drafts_created += 1
 
             briefing = action_data.get('briefing', '已為您處理完畢。')

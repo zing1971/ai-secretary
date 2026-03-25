@@ -31,6 +31,7 @@ class _State:
     llm_service = None
     intent_router = None
     dispatcher = None
+    creds = None
     ready = False
 
 S = _State()
@@ -64,12 +65,15 @@ async def _initialize_all_services(app):
         S.intent_router = IntentRouter(Config.GEMINI_API_KEY)
         logger.info("✅ AI 服務就緒")
 
+        from google_auth import get_credentials
+        S.creds = get_credentials()
         gmail, calendar, tasks, sheets, drive, people = get_google_services()
         logger.info("✅ Google 服務就緒")
 
         S.dispatcher = RoleDispatcher(
             S.tg_service, S.llm_service,
-            gmail, calendar, tasks, sheets, drive, people
+            gmail, calendar, tasks, sheets, drive, people,
+            creds=S.creds
         )
         logger.info("✅ 雙角色分流器就緒（Alice + Birdie）")
 
@@ -206,15 +210,22 @@ async def trigger_briefing(request: Request):
         return JSONResponse(status_code=503, content={"status": "error", "message": "服務尚未就緒"})
     try:
         S.tg_service.push_text("⏳ 每日例行簡報任務已由排程器啟動...")
+        
+        # 啟動主動處理流程
         report = await asyncio.to_thread(S.dispatcher.handle_proactive_process)
+        
         push_msg = f"🌅 仁哥早安！以下是 Alice 為您準備的今日簡報：\n{report}"
         S.tg_service.push_text(push_msg)
+        
         if hasattr(S.tg_service, 'send_context_menu'):
             S.tg_service.send_context_menu("morning_briefing")
+            
         logger.info("✅ 早安簡報推送成功！")
-        return JSONResponse(content={"status": "ok", "message": "簡報已推送"})
-    except BrokenPipeError:
-        return JSONResponse(status_code=500, content={"status": "error", "message": "Broken pipe detected"})
+        return JSONResponse(content={"status": "ok", "message": "簡報已推送", "report_length": len(report)})
+        
+    except BrokenPipeError as e:
+        logger.error(f"❌ 簡報執行遇到 Broken pipe (管道中斷): {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "reason": "broken_pipe", "message": str(e)})
     except Exception as e:
         logger.error(f"❌ 簡報執行失敗: {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})

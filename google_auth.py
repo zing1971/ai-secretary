@@ -23,8 +23,8 @@ def clean_api_key(api_key: str) -> str:
     # 只去除首尾空格、換行與引號
     return api_key.strip().replace('"', '').replace("'", "")
 
-def get_google_services():
-    """取得 Gmail、Calendar、Tasks、Sheets、Drive API 服務。"""
+def get_credentials():
+    """取得 Google OAuth2 憑證 (Credentials) 物件。"""
     creds = None
     
     # 支援從環境變數讀取 token (Cloud Run 必備)
@@ -43,18 +43,23 @@ def get_google_services():
     # 如果沒有有效的憑證，讓使用者登入或重新整理
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                print(f"Token 刷新失敗: {e}")
+                creds = None  # 強制重新登入流程
+        
+        if not creds:
             # 支援從環境變數讀取 credentials (Cloud Run 必備)
             creds_env = os.getenv("GOOGLE_CREDENTIALS_JSON")
             if creds_env:
                 try:
                     creds_data = json.loads(creds_env)
                     flow = InstalledAppFlow.from_client_config(creds_data, SCOPES)
-                    # 雲端環境無法彈出視窗，通常需依賴事先生成的 token.json
-                    # 這裡保留 logic 防止本地遺失時可觸發流程
                     if not os.environ.get("DEPLOY_ENV") == "cloud":
                         creds = flow.run_local_server(port=8080)
+                    else:
+                        print("⚠️ 雲端環境且 Token 失效，請在本地執行 update_auth_and_cloud.py 更新 Token")
                 except Exception as e:
                     print(f"從環境變數讀取 Credentials 失敗: {e}")
 
@@ -69,9 +74,17 @@ def get_google_services():
                 )
         
         # 儲存下一次執行使用的憑證 (如果在開發環境下)
-        if not os.environ.get("DEPLOY_ENV") == "cloud":
+        if creds and not os.environ.get("DEPLOY_ENV") == "cloud":
             with open('token.json', 'w') as token:
                 token.write(creds.to_json())
+
+    return creds
+
+def get_google_services():
+    """取得 Gmail、Calendar、Tasks、Sheets、Drive、People API 服務。"""
+    creds = get_credentials()
+    if not creds:
+        return None, None, None, None, None, None
 
     gmail_service = build('gmail', 'v1', credentials=creds)
     calendar_service = build('calendar', 'v3', credentials=creds)

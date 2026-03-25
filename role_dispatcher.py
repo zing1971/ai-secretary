@@ -40,9 +40,10 @@ class RoleDispatcher:
     """
 
     def __init__(self, messaging_service, llm_service: LLMService,
-                 gmail, calendar, tasks, sheets, drive=None, people=None):
+                 gmail, calendar, tasks, sheets, drive=None, people=None, creds=None):
         self.line = messaging_service  # 保留屬性名稱以相容 Alice/Birdie 內部呼叫
         self.llm = llm_service
+        self.creds = creds
 
         # 初始化 NotebookLM 與記憶服務（共用）
         notebooklm = NotebookLMService()
@@ -69,6 +70,7 @@ class RoleDispatcher:
             memory_service=self.memory,
             notebooklm_service=notebooklm,
             drive_service_wrapper=drive_svc,
+            creds=creds
         )
 
         self.birdie = BirdieActionHandler(
@@ -81,6 +83,7 @@ class RoleDispatcher:
             memory_service=self.memory,
             drive_organizer=drive_organizer,
             people=people,
+            creds=creds
         )
 
         # ===== 共用流程控制 =====

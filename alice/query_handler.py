@@ -30,7 +30,7 @@ class AliceQueryHandler:
     }
 
     def __init__(self, messaging_service, llm_service, gmail, calendar, tasks,
-                 memory_service, notebooklm_service, drive_service_wrapper=None):
+                 memory_service, notebooklm_service, drive_service_wrapper=None, creds=None):
         self.line = messaging_service
         self.llm = llm_service
         self.gmail = gmail
@@ -39,7 +39,23 @@ class AliceQueryHandler:
         self.memory = memory_service
         self.notebooklm = notebooklm_service
         self.drive = drive_service_wrapper  # DriveService (非 DriveOrganizer)
+        self.creds = creds
         self._handoff_fn = None  # 跨角色轉交回呼
+
+    def get_service(self, name, version='v1'):
+        """執行緒安全地取得服務物件 (若在背景執行緒)"""
+        if self.creds:
+            from googleapiclient.discovery import build
+            # 這裡簡單起見，直接 build。若效能有感，可加 thread-local 快取。
+            return build(name, version, credentials=self.creds)
+        
+        # 若無 creds (如本地測試)，則回傳初始傳入的服務 (可能非執行緒安全)
+        service_map = {
+            'gmail': self.gmail,
+            'calendar': self.calendar,
+            'tasks': self.tasks,
+        }
+        return service_map.get(name)
 
     def set_handoff(self, handoff_fn):
         """設定跨角色轉交函數（由 RoleDispatcher 注入）"""
