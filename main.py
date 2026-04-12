@@ -1,50 +1,49 @@
 """
-AI Secretary - CLI 模式手動匯報（Telegram 版）
-直接呼叫 TelegramService 推送報告。
+AI Secretary (Hermes Agent 架構) - 入口點
+直接啟動 Hermes Gateway，使用 Telegram 進行長輪詢 (Long Polling) 通訊。
 """
-from config import logger
-from google_auth import get_google_services
-from gmail_service import get_recent_emails
-from calendar_service import get_todays_events
-from llm_service import LLMService
-from telegram_service import TelegramService
-from config import Config
+import os
+import sys
+import subprocess
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("AI-Secretary")
+
 
 def main():
-    logger.info("正在執行 CLI 模式手動匯報任務...")
+    """啟動 Hermes Agent Gateway"""
 
-    # 1. 取得 Google 服務
+    # 驗證必要環境變數
+    from config import Config
+    if not Config.validate():
+        logger.error("環境變數驗證失敗，無法啟動。")
+        sys.exit(1)
+
+    # 複製 persona 設定到 Hermes 目錄
+    hermes_dir = os.path.expanduser("~/.hermes")
+    os.makedirs(hermes_dir, exist_ok=True)
+
+    soul_src = os.path.join(os.path.dirname(__file__), "persona_soul.md")
+    soul_dst = os.path.join(hermes_dir, "SOUL.md")
+    if os.path.exists(soul_src):
+        import shutil
+        shutil.copy2(soul_src, soul_dst)
+        logger.info(f"Persona 設定已同步至 {soul_dst}")
+
+    logger.info("正在啟動 Hermes Gateway...")
     try:
-        gmail_service, calendar_service, *_ = get_google_services()
-    except Exception as e:
-        logger.error(f"Google 驗證失敗: {e}")
-        return
+        subprocess.run(["hermes", "gateway", "start"], check=True)
+    except FileNotFoundError:
+        logger.error("找不到 hermes 指令，請確認已安裝 hermes-agent 套件。")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info("收到中斷訊號，正在關閉...")
 
-    # 2. 抓取資料
-    logger.info("正在抓取今日行程與新信件...")
-    events = get_todays_events(calendar_service)
-    emails_raw = get_recent_emails(gmail_service)
-    emails = [e['summary_text'] for e in emails_raw]
-
-    # 3. AI 生成報告
-    logger.info("正在由 AI 秘書擬定匯報內容...")
-    prompt_path = "ai_prompt_draft.md"
-    try:
-        with open(prompt_path, "r", encoding="utf-8") as f:
-            system_prompt = f.read()
-
-        llm = LLMService(Config.GEMINI_API_KEY)
-        report = llm.generate_report(events, emails, system_prompt)
-    except Exception as e:
-        logger.error(f"AI 生成匯報失敗: {e}")
-        return
-
-    # 4. 推送至 Telegram
-    logger.info("正在發送 Telegram 匯報...")
-    tg = TelegramService()
-    tg.push_text(report)
-
-    logger.info("CLI 任務執行成功！")
 
 if __name__ == "__main__":
     main()

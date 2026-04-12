@@ -6,7 +6,8 @@ Google Workspace 技能封裝模組，供 Hermes Agent 取用。
 from google_auth import get_google_services
 from gmail_service import get_recent_emails as _get_recent_emails, create_gmail_draft as _create_gmail_draft
 from calendar_service import get_events, get_todays_events as _get_todays_events
-from drive_organizer import DriveOrganizer
+from tasks_service import create_google_task as _create_task, list_tasks as _list_tasks
+from drive_service import DriveService
 
 def get_todays_calendar_events() -> str:
     """
@@ -65,8 +66,7 @@ def create_email_draft(to_email: str, subject: str, body_text: str, thread_id: s
         return f"✅ 草稿已建立！草稿 ID: {draft['id']}"
     return "建立草稿失敗。"
 
-from tasks_service import create_google_task as _create_task, list_tasks as _list_tasks
-from drive_service import DriveService
+
 
 def add_google_task(title: str, notes: str = None, due: str = None) -> str:
     """
