@@ -16,9 +16,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 複製專案原始碼
 COPY . .
 
-# 暴露埠號 (Cloud Run 預設會使用 8080)
+# 暴露可能需要的埠號 (例如 MCP Server 等)
 EXPOSE 8080
 
+# 宣告 Volume 掛載點以保護 Hermes 代理程式記憶體 (SQLite + Markdown)
+VOLUME ["/root/.hermes"]
+
+# 確保啟動腳本具備執行權限
+RUN chmod +x start_agent.sh
+
 # 啟動應用程式
-# 使用 shell 形式以確保 $PORT 變數能被正確替換
-CMD uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080}
+CMD ["./start_agent.sh"]

@@ -52,21 +52,16 @@ class Config:
     TELEGRAM_BOT_TOKEN = _get_env("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_CHAT_ID   = _get_env("TELEGRAM_CHAT_ID", "")
 
-    # ── (舊) LINE — 保留供回溯比對；已不再主動使用 ─────────────────
-    LINE_CHANNEL_ACCESS_TOKEN = _get_env("LINE_CHANNEL_ACCESS_TOKEN", "")
-    LINE_CHANNEL_SECRET = _get_env("LINE_CHANNEL_SECRET", "")
-    LINE_USER_ID = _get_env("LINE_USER_ID", "")
+    # ── 系統環境 ─────────────────────────────────────────────────
+    PORT = int(os.getenv("PORT", "8080"))
+    DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
+
     GEMINI_API_KEY = _clean_api_key(_get_env("GEMINI_API_KEY", ""))
     GOOGLE_SHEET_ID = _get_env("GOOGLE_SHEET_ID", "")
-    PINECONE_API_KEY = _get_env("PINECONE_API_KEY", "")
 
-    # NotebookLM IDs
     NOTEBOOK_ID_INFOSEC = _get_env("NOTEBOOK_ID_INFOSEC", "")
     NOTEBOOK_ID_IT = _get_env("NOTEBOOK_ID_IT", "")
     NOTEBOOK_ID_TRENDS = _get_env("NOTEBOOK_ID_TRENDS", "")
-
-    PORT = int(os.getenv("PORT", "8080"))
-    DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 
     @classmethod
     def validate(cls):
@@ -84,9 +79,6 @@ class Config:
         if missing:
             logger.error(f"❌ 缺少環境變數: {', '.join(missing)}")
             return False
-
-        if not cls.PINECONE_API_KEY:
-            logger.warning("⚠️ 未設定 PINECONE_API_KEY，Pinecone 向量記憶功能將停用")
 
         logger.info("✅ 環境變數驗證通過。")
         return True
