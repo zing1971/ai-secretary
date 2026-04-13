@@ -59,17 +59,28 @@ pip install --upgrade pip -q
 pip install -r requirements.txt -q
 echo "  依賴安裝完成。"
 
-# ── Step 4: 安裝 Hermes Agent ─────────────────────────────
+# ── Step 4: 確認 hermes-agent 已透過 pip 安裝 ────────────────
 echo ""
-echo "🤖 Step 4: 安裝 / 更新 Hermes Agent..."
+echo "🤖 Step 4: 確認 hermes-agent..."
 
-if ! command -v hermes &> /dev/null; then
-    echo "  首次安裝 Hermes Agent..."
-    curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
-    source ~/.bashrc
+if ! "$APP_DIR/venv/bin/hermes" --version &> /dev/null 2>&1; then
+    echo "  安裝 hermes-agent 至 venv..."
+    "$APP_DIR/venv/bin/pip" install hermes-agent -q
+fi
+echo "  hermes-agent 已就緒。"
+
+# ── Step 4b: 安裝 cloudflared ─────────────────────────────
+echo ""
+echo "🚇 Step 4b: 安裝 cloudflared..."
+
+if ! command -v cloudflared &> /dev/null; then
+    curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
+        -o /tmp/cloudflared.deb
+    sudo dpkg -i /tmp/cloudflared.deb
+    rm -f /tmp/cloudflared.deb
+    echo "  cloudflared 安裝完成。"
 else
-    echo "  更新 Hermes Agent..."
-    hermes update || true
+    echo "  cloudflared 已存在，跳過。"
 fi
 
 # ── Step 5: 建立持久化目錄 ─────────────────────────────────
@@ -88,6 +99,31 @@ if [ -f "$APP_DIR/persona_soul.md" ]; then
     cp "$APP_DIR/persona_soul.md" "$HERMES_DIR/SOUL.md"
     echo "  SOUL.md 已同步。"
 fi
+
+# ── Step 6b: 生成 ~/.hermes/config.yaml ──────────────────
+echo ""
+echo "⚙️  Step 6b: 生成 Hermes 設定檔..."
+
+# 載入 .env 取得 token 值
+set -o allexport
+source "$APP_DIR/.env"
+set +o allexport
+
+cat > "$HERMES_DIR/config.yaml" << HEREDOC
+model: gemini:gemini-2.5-flash
+
+platforms:
+  telegram:
+    token: "${TELEGRAM_BOT_TOKEN}"
+    webhook_url: "https://placeholder.trycloudflare.com"
+    allowed_chat_ids:
+      - "${TELEGRAM_CHAT_ID}"
+
+skills_dir: ${HERMES_DIR}/skills
+soul_file: ${HERMES_DIR}/SOUL.md
+HEREDOC
+
+echo "  config.yaml 已生成（webhook_url 將由 main.py 啟動時自動更新）。"
 
 # ── Step 7: 設定 Google Workspace 技能 ─────────────────────
 echo ""
@@ -157,7 +193,7 @@ Type=simple
 User=$USER
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$APP_DIR/.env
-ExecStart=$APP_DIR/venv/bin/python -c "import subprocess; subprocess.run(['hermes', 'gateway', 'start'])"
+ExecStart=$APP_DIR/venv/bin/python $APP_DIR/main.py
 Restart=on-failure
 RestartSec=10
 
@@ -165,9 +201,9 @@ RestartSec=10
 ExecStartPre=/bin/mkdir -p $HERMES_DIR
 
 # 環境變數
-Environment=PYTHONPATH=$APP_DIR
 Environment=HERMES_MODEL=gemini:gemini-2.5-flash
 Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONPATH=$APP_DIR
 
 [Install]
 WantedBy=multi-user.target
