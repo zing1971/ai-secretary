@@ -45,3 +45,35 @@ def test_register_webhook_exception():
 
     with patch("main.requests.post", side_effect=ConnectionError("timeout")):
         assert register_webhook("fake-token", "https://abc.trycloudflare.com") is False
+
+
+def test_start_cloudflared_returns_url():
+    """cloudflared 輸出含 URL 的行時，應回傳 (proc, url)"""
+    import io
+
+    mock_proc = MagicMock()
+    mock_proc.stdout = iter([
+        "INF Starting tunnel\n",
+        "INF +----------------------------+ https://test-123.trycloudflare.com\n",
+    ])
+
+    with patch("main.subprocess.Popen", return_value=mock_proc):
+        from main import start_cloudflared
+        proc, url = start_cloudflared(8080)
+
+    assert url == "https://test-123.trycloudflare.com"
+    assert proc is mock_proc
+
+
+def test_start_cloudflared_raises_on_early_exit():
+    """cloudflared stdout 關閉前未輸出 URL 時，應拋出 RuntimeError"""
+    import pytest
+
+    mock_proc = MagicMock()
+    mock_proc.stdout = iter(["INF Starting tunnel\n"])  # no URL line
+    mock_proc.returncode = 1
+
+    with patch("main.subprocess.Popen", return_value=mock_proc):
+        from main import start_cloudflared
+        with pytest.raises(RuntimeError, match="cloudflared 異常結束"):
+            start_cloudflared(8080)

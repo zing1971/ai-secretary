@@ -88,12 +88,19 @@ def start_cloudflared(port: int) -> tuple:
                 for _ in proc.stdout:
                     pass
                 return
+        # stdout 關閉但未找到 URL（程序提早結束）
+        found.set()  # 解除主執行緒等待，holder[0] 仍為 None
 
     threading.Thread(target=_reader, daemon=True).start()
 
     if not found.wait(timeout=30):
         proc.terminate()
         raise RuntimeError("cloudflared 未能在 30 秒內提供 tunnel URL")
+
+    if holder[0] is None:
+        # 程序在提供 URL 之前異常結束
+        proc.wait()
+        raise RuntimeError(f"cloudflared 異常結束（return code: {proc.returncode}），未能取得 tunnel URL")
 
     return proc, holder[0]
 
@@ -121,6 +128,9 @@ def main():
     logger.info(f"🚇 啟動 cloudflared tunnel (→ localhost:{Config.PORT})...")
     try:
         cf_proc, tunnel_url = start_cloudflared(Config.PORT)
+    except FileNotFoundError:
+        logger.error("找不到 cloudflared 指令，請確認已安裝 cloudflared。")
+        sys.exit(1)
     except RuntimeError as e:
         logger.error(str(e))
         sys.exit(1)
@@ -141,7 +151,10 @@ def main():
     finally:
         logger.info("關閉 cloudflared...")
         cf_proc.terminate()
-        cf_proc.wait(timeout=5)
+        try:
+            cf_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            cf_proc.kill()
 
 
 if __name__ == "__main__":
