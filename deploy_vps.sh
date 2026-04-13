@@ -63,7 +63,7 @@ echo "  依賴安裝完成。"
 echo ""
 echo "🤖 Step 4: 確認 hermes-agent..."
 
-if ! "$APP_DIR/venv/bin/hermes" --version &> /dev/null 2>&1; then
+if ! "$APP_DIR/venv/bin/hermes" --version &> /dev/null; then
     echo "  安裝 hermes-agent 至 venv..."
     "$APP_DIR/venv/bin/pip" install hermes-agent -q
 fi
@@ -80,7 +80,7 @@ if ! command -v cloudflared &> /dev/null; then
     rm -f /tmp/cloudflared.deb
     echo "  cloudflared 安裝完成。"
 else
-    echo "  cloudflared 已存在，跳過。"
+    echo "  cloudflared 已存在 ($(cloudflared --version 2>&1 | head -1))，跳過。"
 fi
 
 # ── Step 5: 建立持久化目錄 ─────────────────────────────────
@@ -104,12 +104,14 @@ fi
 echo ""
 echo "⚙️  Step 6b: 生成 Hermes 設定檔..."
 
-# 載入 .env 取得 token 值
-set -o allexport
-source "$APP_DIR/.env"
-set +o allexport
+if [ ! -f "$APP_DIR/.env" ]; then
+    echo "  ⚠️ 找不到 .env，跳過 config.yaml 生成（將於 Step 8 中止）"
+else
+    set -o allexport
+    source "$APP_DIR/.env"
+    set +o allexport
 
-cat > "$HERMES_DIR/config.yaml" << HEREDOC
+    cat > "$HERMES_DIR/config.yaml" << HEREDOC
 model: gemini:gemini-2.5-flash
 
 platforms:
@@ -117,13 +119,14 @@ platforms:
     token: "${TELEGRAM_BOT_TOKEN}"
     webhook_url: "https://placeholder.trycloudflare.com"
     allowed_chat_ids:
-      - "${TELEGRAM_CHAT_ID}"
+      - '${TELEGRAM_CHAT_ID}'
 
-skills_dir: ${HERMES_DIR}/skills
-soul_file: ${HERMES_DIR}/SOUL.md
+skills_dir: '${HERMES_DIR}/skills'
+soul_file: '${HERMES_DIR}/SOUL.md'
 HEREDOC
 
-echo "  config.yaml 已生成（webhook_url 將由 main.py 啟動時自動更新）。"
+    echo "  config.yaml 已生成（webhook_url 將由 main.py 啟動時自動更新）。"
+fi
 
 # ── Step 7: 設定 Google Workspace 技能 ─────────────────────
 echo ""
