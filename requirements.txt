@@ -5,4 +5,4 @@ google-genai
 python-dotenv
 requests
 pytz
-hermes-agent
+git+https://github.com/nousresearch/hermes-agent.git

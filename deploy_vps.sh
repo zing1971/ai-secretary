@@ -198,7 +198,9 @@ WorkingDirectory=$APP_DIR
 EnvironmentFile=$APP_DIR/.env
 ExecStart=$APP_DIR/venv/bin/python $APP_DIR/main.py
 Restart=on-failure
-RestartSec=10
+RestartSec=60
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 # 確保 Hermes 目錄存在
 ExecStartPre=/bin/mkdir -p $HERMES_DIR
