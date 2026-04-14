@@ -142,7 +142,7 @@ def main():
 
     logger.info("🤖 啟動 Hermes Gateway...")
     try:
-        subprocess.run(["hermes", "gateway", "start"], check=True)
+        subprocess.run(["hermes", "gateway", "run"], check=True)
     except FileNotFoundError:
         logger.error("找不到 hermes 指令，請確認已安裝 hermes-agent 套件。")
         sys.exit(1)
