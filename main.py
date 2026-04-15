@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import threading
 import logging
+import time
 import requests
 
 logging.basicConfig(
@@ -34,24 +35,50 @@ def parse_cloudflare_url(line: str) -> str | None:
     return m.group(0) if m else None
 
 
-def register_webhook(bot_token: str, tunnel_url: str) -> bool:
-    """向 Telegram 註冊 webhook，成功回傳 True，失敗回傳 False。"""
+def update_hermes_webhook_url(tunnel_url: str) -> None:
+    """更新 ~/.hermes/config.yaml 的 webhook_url 為實際 tunnel URL。"""
+    config_path = os.path.expanduser("~/.hermes/config.yaml")
+    if not os.path.exists(config_path):
+        logger.warning(f"找不到 {config_path}，跳過 webhook_url 更新")
+        return
+    with open(config_path, "r") as f:
+        content = f.read()
+    webhook_url = f"{tunnel_url}/webhook"
+    new_content = re.sub(
+        r'webhook_url:\s*"[^"]*"',
+        f'webhook_url: "{webhook_url}"',
+        content,
+    )
+    with open(config_path, "w") as f:
+        f.write(new_content)
+    logger.info(f"📝 config.yaml webhook_url 已更新：{webhook_url}")
+
+
+def register_webhook(
+    bot_token: str, tunnel_url: str, max_retries: int = 3, retry_delay: float = 5.0
+) -> bool:
+    """向 Telegram 註冊 webhook，支援重試。成功回傳 True，失敗回傳 False。"""
     endpoint = f"{tunnel_url}/webhook"
-    try:
-        resp = requests.post(
-            f"https://api.telegram.org/bot{bot_token}/setWebhook",
-            json={"url": endpoint},
-            timeout=15,
-        )
-        result = resp.json()
-        if result.get("ok"):
-            logger.info(f"✅ Webhook 已註冊：{endpoint}")
-            return True
-        logger.error(f"❌ Webhook 註冊失敗：{result.get('description')}")
-        return False
-    except Exception as e:
-        logger.error(f"❌ Webhook 註冊例外：{e}")
-        return False
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(
+                f"https://api.telegram.org/bot{bot_token}/setWebhook",
+                json={"url": endpoint},
+                timeout=15,
+            )
+            result = resp.json()
+            if result.get("ok"):
+                logger.info(f"✅ Webhook 已註冊：{endpoint}")
+                return True
+            desc = result.get("description", "unknown error")
+            logger.warning(f"⚠️  Webhook 第 {attempt} 次嘗試失敗：{desc}")
+        except Exception as e:
+            logger.warning(f"⚠️  Webhook 第 {attempt} 次嘗試例外：{e}")
+        if attempt < max_retries:
+            logger.info(f"   {retry_delay:.0f}s 後重試...")
+            time.sleep(retry_delay)
+    logger.error(f"❌ Webhook 註冊失敗（已重試 {max_retries} 次）")
+    return False
 
 
 def start_cloudflared(port: int) -> tuple:
@@ -136,6 +163,7 @@ def main():
         sys.exit(1)
 
     logger.info(f"🌐 Tunnel URL：{tunnel_url}")
+    update_hermes_webhook_url(tunnel_url)
 
     if not register_webhook(Config.TELEGRAM_BOT_TOKEN, tunnel_url):
         logger.warning("⚠️  Webhook 未成功註冊，繼續啟動（可手動重試）")

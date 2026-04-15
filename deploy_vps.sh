@@ -128,6 +128,23 @@ HEREDOC
     echo "  config.yaml 已生成（webhook_url 將由 main.py 啟動時自動更新）。"
 fi
 
+# ── Step 6c: 生成 ~/.hermes/.env（用戶白名單）────────────────
+echo ""
+echo "⚙️  Step 6c: 生成 Hermes 用戶白名單設定..."
+
+if [ -f "$APP_DIR/.env" ]; then
+    set -o allexport
+    source "$APP_DIR/.env"
+    set +o allexport
+
+    cat > "$HERMES_DIR/.env" << HEREDOC
+TELEGRAM_ALLOWED_USERS=${TELEGRAM_CHAT_ID}
+HEREDOC
+    echo "  ~/.hermes/.env 已生成（TELEGRAM_ALLOWED_USERS=${TELEGRAM_CHAT_ID}）。"
+else
+    echo "  ⚠️ 找不到 .env，跳過 ~/.hermes/.env 生成。"
+fi
+
 # ── Step 7: 設定 Google Workspace 技能 ─────────────────────
 echo ""
 echo "🔧 Step 7: 部署 Google Workspace 技能..."
@@ -190,6 +207,8 @@ sudo tee "$SERVICE_FILE" > /dev/null << EOF
 [Unit]
 Description=AI Secretary (Hermes Agent)
 After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -199,8 +218,6 @@ EnvironmentFile=$APP_DIR/.env
 ExecStart=$APP_DIR/venv/bin/python $APP_DIR/main.py
 Restart=on-failure
 RestartSec=60
-StartLimitIntervalSec=300
-StartLimitBurst=3
 
 # 確保 Hermes 目錄存在
 ExecStartPre=/bin/mkdir -p $HERMES_DIR
