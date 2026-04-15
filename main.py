@@ -165,8 +165,22 @@ def main():
     logger.info(f"🌐 Tunnel URL：{tunnel_url}")
     update_hermes_webhook_url(tunnel_url)
 
-    if not register_webhook(Config.TELEGRAM_BOT_TOKEN, tunnel_url):
-        logger.warning("⚠️  Webhook 未成功註冊，繼續啟動（可手動重試）")
+    # 背景執行緒持續重試 webhook 註冊（trycloudflare.com DNS 傳播需時 ~60s）
+    stop_webhook_retry = threading.Event()
+
+    def _webhook_retry_loop() -> None:
+        for attempt in range(1, 13):  # 最多 12 次，約 2 分鐘
+            if stop_webhook_retry.is_set():
+                return
+            if register_webhook(Config.TELEGRAM_BOT_TOKEN, tunnel_url, max_retries=1):
+                return
+            if attempt < 12:
+                logger.info(f"   ⏳ Webhook 將在 15s 後重試（{attempt}/12）...")
+                stop_webhook_retry.wait(timeout=15.0)
+        logger.error("❌ Webhook 背景重試已達上限，請手動確認")
+
+    webhook_thread = threading.Thread(target=_webhook_retry_loop, daemon=True)
+    webhook_thread.start()
 
     logger.info("🤖 啟動 Hermes Gateway...")
     try:
@@ -177,6 +191,7 @@ def main():
     except KeyboardInterrupt:
         logger.info("收到中斷訊號，正在關閉...")
     finally:
+        stop_webhook_retry.set()
         logger.info("關閉 cloudflared...")
         cf_proc.terminate()
         try:
