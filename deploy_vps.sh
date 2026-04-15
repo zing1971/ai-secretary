@@ -117,15 +117,12 @@ model: gemini-2.5-flash
 platforms:
   telegram:
     token: "${TELEGRAM_BOT_TOKEN}"
-    webhook_url: "https://placeholder.trycloudflare.com"
-    allowed_chat_ids:
-      - '${TELEGRAM_CHAT_ID}'
 
 skills_dir: '${HERMES_DIR}/skills'
 soul_file: '${HERMES_DIR}/SOUL.md'
 HEREDOC
 
-    echo "  config.yaml 已生成（webhook_url 將由 main.py 啟動時自動更新）。"
+    echo "  config.yaml 已生成（polling 模式，無 webhook）。"
 fi
 
 # ── Step 6c: 生成 ~/.hermes/.env（用戶白名單）────────────────
@@ -139,6 +136,7 @@ if [ -f "$APP_DIR/.env" ]; then
 
     cat > "$HERMES_DIR/.env" << HEREDOC
 TELEGRAM_ALLOWED_USERS=${TELEGRAM_CHAT_ID}
+GATEWAY_ALLOW_ALL_USERS=true
 HEREDOC
     echo "  ~/.hermes/.env 已生成（TELEGRAM_ALLOWED_USERS=${TELEGRAM_CHAT_ID}）。"
 else
