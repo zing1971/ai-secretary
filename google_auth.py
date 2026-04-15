@@ -1,9 +1,15 @@
+import os
 import os.path
 import json
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+
+# 以 google_auth.py 所在目錄為基準，確保不受 CWD 影響
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_TOKEN_PATH = os.path.join(_BASE_DIR, "token.json")
+_CREDS_PATH = os.path.join(_BASE_DIR, "credentials.json")
 
 # 如果修改這些 SCOPES，請刪除 token.json。
 SCOPES = [
@@ -37,8 +43,8 @@ def get_credentials():
             print(f"從環境變數讀取 Token 失敗: {e}")
 
     # 若環境變數沒有，則讀取本地檔案
-    if not creds and os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    if not creds and os.path.exists(_TOKEN_PATH):
+        creds = Credentials.from_authorized_user_file(_TOKEN_PATH, SCOPES)
     
     # 如果沒有有效的憑證，讓使用者登入或重新整理
     if not creds or not creds.valid:
@@ -64,9 +70,9 @@ def get_credentials():
                     print(f"從環境變數讀取 Credentials 失敗: {e}")
 
             if not creds:
-                if not os.path.exists('credentials.json'):
+                if not os.path.exists(_CREDS_PATH):
                     raise FileNotFoundError("請確保 credentials.json 檔案存在或已設定 GOOGLE_CREDENTIALS_JSON 環境變數。")
-                flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+                flow = InstalledAppFlow.from_client_secrets_file(_CREDS_PATH, SCOPES)
                 creds = flow.run_local_server(
                     port=8080,
                     access_type='offline',
@@ -75,7 +81,7 @@ def get_credentials():
         
         # 儲存下一次執行使用的憑證 (如果在開發環境下)
         if creds and not os.environ.get("DEPLOY_ENV") == "cloud":
-            with open('token.json', 'w') as token:
+            with open(_TOKEN_PATH, 'w') as token:
                 token.write(creds.to_json())
 
     return creds
