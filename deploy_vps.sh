@@ -150,6 +150,19 @@ echo "🔧 Step 7: 部署 Google Workspace 技能..."
 cp "$APP_DIR/google_workspace_skills.py" "$HERMES_DIR/skills/"
 echo "  技能已部署到 $HERMES_DIR/skills/"
 
+# 確保 hermes 自己的 venv 也有 Google API 套件
+HERMES_PYTHON="$HERMES_DIR/hermes-agent/venv/bin/python3"
+if [ -f "$HERMES_PYTHON" ]; then
+    echo "  安裝 Google API 套件至 hermes venv..."
+    "$HERMES_PYTHON" -m pip install --quiet \
+        google-api-python-client \
+        google-auth-httplib2 \
+        google-auth-oauthlib
+    echo "  ✅ Google API 套件安裝完成。"
+else
+    echo "  ⚠️ 找不到 hermes venv ($HERMES_PYTHON)，跳過套件安裝。"
+fi
+
 # ── Step 8: 環境變數檢查 ──────────────────────────────────
 echo ""
 echo "🔑 Step 8: 檢查環境變數..."
