@@ -112,7 +112,7 @@ else
     set +o allexport
 
     cat > "$HERMES_DIR/config.yaml" << HEREDOC
-model: gemini:gemini-2.5-flash
+model: gemini-2.5-flash
 
 platforms:
   telegram:
@@ -206,7 +206,7 @@ StartLimitBurst=3
 ExecStartPre=/bin/mkdir -p $HERMES_DIR
 
 # 環境變數
-Environment=HERMES_MODEL=gemini:gemini-2.5-flash
+Environment=HERMES_MODEL=gemini-2.5-flash
 Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONPATH=$APP_DIR
 
