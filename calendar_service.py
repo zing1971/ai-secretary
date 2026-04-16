@@ -63,3 +63,64 @@ def get_todays_events(service):
     now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' 表示 UTC 時間
     today_end = datetime.datetime.utcnow().replace(hour=23, minute=59, second=59).isoformat() + 'Z'
     return get_events(service, now, today_end)
+
+
+def create_event(
+    service,
+    title: str,
+    start_time: str,
+    end_time: str,
+    description: str = None,
+    location: str = None,
+) -> dict | None:
+    """
+    建立一個 Google Calendar 行程。
+
+    Args:
+        service: Google Calendar API service instance
+        title: 行程標題
+        start_time: 開始時間，格式 "YYYY-MM-DD HH:MM"（台北時間）或 "YYYY-MM-DD"（全天）
+        end_time: 結束時間，格式同上
+        description: 備註說明（可選）
+        location: 地點（可選）
+
+    Returns:
+        建立成功的行程物件 dict，或拋出 RuntimeError（失敗時）
+    """
+    tz = pytz.timezone('Asia/Taipei')
+
+    # 全天行程判斷：純日期格式 YYYY-MM-DD（長度 10，無空格無 T）
+    is_all_day = len(start_time) == 10 and ' ' not in start_time and 'T' not in start_time
+
+    if is_all_day:
+        event_body: dict = {
+            'summary': title,
+            'start': {'date': start_time},
+            'end': {'date': end_time},
+        }
+    else:
+        fmt = "%Y-%m-%d %H:%M"
+        try:
+            start_dt = tz.localize(datetime.datetime.strptime(start_time, fmt))
+            end_dt = tz.localize(datetime.datetime.strptime(end_time, fmt))
+        except ValueError as exc:
+            raise ValueError(
+                f"時間格式不正確：{exc}。"
+                f"請使用 'YYYY-MM-DD HH:MM' 或 'YYYY-MM-DD' 格式。"
+            ) from exc
+
+        event_body = {
+            'summary': title,
+            'start': {'dateTime': start_dt.isoformat(), 'timeZone': 'Asia/Taipei'},
+            'end': {'dateTime': end_dt.isoformat(), 'timeZone': 'Asia/Taipei'},
+        }
+
+    if description:
+        event_body['description'] = description
+    if location:
+        event_body['location'] = location
+
+    try:
+        return service.events().insert(calendarId='primary', body=event_body).execute()
+    except Exception as exc:
+        raise RuntimeError(f"Google Calendar API 建立行程失敗：{exc}") from exc

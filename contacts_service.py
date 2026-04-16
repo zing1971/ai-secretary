@@ -238,3 +238,45 @@ def update_contact_label(service, resource_name: str, _etag: str, label: str,
                          cache: dict = None) -> bool:
     """將聯絡人加入指定標籤（Contact Group）。_etag 參數保留供向後相容，不使用。"""
     return assign_label_to_contact(service, resource_name, label, cache)
+
+
+def search_contacts(service, query: str, max_results: int = 10) -> list[dict]:
+    """
+    根據關鍵字搜尋 Google Contacts 中的聯絡人（姓名、Email、公司名稱等）。
+
+    Args:
+        service: Google People API service instance
+        query: 搜尋關鍵字
+        max_results: 最多回傳幾筆結果（預設 10）
+
+    Returns:
+        list of dict，每筆含 resourceName, name, email, phone, company, job_title
+    """
+    try:
+        result = service.people().searchContacts(
+            query=query,
+            pageSize=max_results,
+            readMask='names,emailAddresses,phoneNumbers,organizations',
+        ).execute()
+
+        contacts = []
+        for item in result.get('results', []):
+            person = item.get('person', {})
+            names = person.get('names', [{}])
+            emails = person.get('emailAddresses', [{}])
+            phones = person.get('phoneNumbers', [{}])
+            orgs = person.get('organizations', [{}])
+            contacts.append({
+                'resourceName': person.get('resourceName', ''),
+                'name': names[0].get('displayName', '') if names else '',
+                'email': emails[0].get('value', '') if emails else '',
+                'phone': phones[0].get('value', '') if phones else '',
+                'company': orgs[0].get('name', '') if orgs else '',
+                'job_title': orgs[0].get('title', '') if orgs else '',
+            })
+        logger.info(f"🔍 搜尋聯絡人「{query}」，找到 {len(contacts)} 筆")
+        return contacts
+
+    except Exception as e:
+        logger.error(f"搜尋聯絡人失敗: {e}", exc_info=True)
+        return []

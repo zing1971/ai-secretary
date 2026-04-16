@@ -133,11 +133,15 @@ fi
 echo ""
 echo "🔧 Step 7: 部署 Google Workspace 技能..."
 
-cp "$APP_DIR/google_workspace_skills.py" "$HERMES_DIR/skills/"
-echo "  技能已部署到 $HERMES_DIR/skills/"
+# 移除舊的單一技能檔案（如有），改用拆分後的 skills/ 目錄
+rm -f "$HERMES_DIR/skills/google_workspace_skills.py"
+
+# 複製 skills/ 目錄下所有 .py 檔至 hermes skills 目錄
+cp "$APP_DIR/skills/"*.py "$HERMES_DIR/skills/"
+echo "  技能已部署到 $HERMES_DIR/skills/ ($(ls "$APP_DIR/skills/"*.py | wc -l) 個檔案)"
 
 # 將 ai-secretary 以 editable 模式安裝至 hermes 的 venv，
-# 讓技能檔可以 import google_auth / gmail_service / calendar_service 等模組。
+# 讓技能檔可以 import google_auth / gmail_service / calendar_service 等服務模組。
 HERMES_PYTHON="$HERMES_DIR/hermes-agent/venv/bin/python3"
 if [ -f "$HERMES_PYTHON" ]; then
     echo "  以 pip install -e 將 ai-secretary 安裝至 hermes venv..."
