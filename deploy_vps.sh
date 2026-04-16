@@ -69,20 +69,6 @@ if ! "$APP_DIR/venv/bin/hermes" --version &> /dev/null; then
 fi
 echo "  hermes-agent 已就緒。"
 
-# ── Step 4b: 安裝 cloudflared ─────────────────────────────
-echo ""
-echo "🚇 Step 4b: 安裝 cloudflared..."
-
-if ! command -v cloudflared &> /dev/null; then
-    curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
-        -o /tmp/cloudflared.deb
-    sudo dpkg -i /tmp/cloudflared.deb
-    rm -f /tmp/cloudflared.deb
-    echo "  cloudflared 安裝完成。"
-else
-    echo "  cloudflared 已存在 ($(cloudflared --version 2>&1 | head -1))，跳過。"
-fi
-
 # ── Step 5: 建立持久化目錄 ─────────────────────────────────
 echo ""
 echo "💾 Step 5: 確保持久化目錄存在..."
@@ -150,15 +136,13 @@ echo "🔧 Step 7: 部署 Google Workspace 技能..."
 cp "$APP_DIR/google_workspace_skills.py" "$HERMES_DIR/skills/"
 echo "  技能已部署到 $HERMES_DIR/skills/"
 
-# 確保 hermes 自己的 venv 也有 Google API 套件
+# 將 ai-secretary 以 editable 模式安裝至 hermes 的 venv，
+# 讓技能檔可以 import google_auth / gmail_service / calendar_service 等模組。
 HERMES_PYTHON="$HERMES_DIR/hermes-agent/venv/bin/python3"
 if [ -f "$HERMES_PYTHON" ]; then
-    echo "  安裝 Google API 套件至 hermes venv..."
-    "$HERMES_PYTHON" -m pip install --quiet \
-        google-api-python-client \
-        google-auth-httplib2 \
-        google-auth-oauthlib
-    echo "  ✅ Google API 套件安裝完成。"
+    echo "  以 pip install -e 將 ai-secretary 安裝至 hermes venv..."
+    "$HERMES_PYTHON" -m pip install --quiet -e "$APP_DIR"
+    echo "  ✅ ai-secretary 套件安裝完成（editable 模式）。"
 else
     echo "  ⚠️ 找不到 hermes venv ($HERMES_PYTHON)，跳過套件安裝。"
 fi
