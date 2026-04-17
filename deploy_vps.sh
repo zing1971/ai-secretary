@@ -116,6 +116,7 @@ platform_toolsets:
     - web
     - memory
     - todo
+    - vision
 HEREDOC
 
     echo "  config.yaml 已生成（terminal toolset 已啟用）。"
