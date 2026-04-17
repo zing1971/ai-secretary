@@ -328,7 +328,7 @@ ExecStartPre=/bin/mkdir -p $HERMES_DIR
 # 環境變數
 Environment=HERMES_MODEL=gemini-2.5-flash
 # alice 命令與 hermes venv 均加入 PATH，讓 terminal tool 可直接呼叫
-Environment=PATH=$APP_DIR/bin:$HERMES_DIR/hermes-agent/venv/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/home/$USER/ai-secretary/bin:/home/$USER/.hermes/hermes-agent/venv/bin:/home/$USER/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONPATH=$APP_DIR
 
 [Install]
