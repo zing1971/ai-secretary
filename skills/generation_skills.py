@@ -60,3 +60,57 @@ def draft_professional_content(task: str, context: str = None) -> str:
         raise RuntimeError("Gemini 2.5 Pro 回傳空結果，請稍後重試")
 
     return f"📝 *（Gemini 2.5 Pro 生成）*\n\n{text}"
+
+
+def analyze_image(
+    image_url: str = None,
+    image_file: str = None,
+    prompt: str = "請描述並提取圖片中的所有文字資訊",
+) -> str:
+    """
+    使用 Gemini 原生視覺能力分析圖片（名片掃描、圖片 OCR 等）。
+    直接呼叫 Gemini API，不經過 OpenRouter。
+
+    Args:
+        image_url:  圖片 URL（支援 http/https，包含 Telegram file URL）。
+        image_file: 本地圖片檔案路徑（與 image_url 擇一）。
+        prompt:     給 Gemini 的分析提示，預設為名片文字提取。
+    """
+    import urllib.request
+    import mimetypes
+
+    client = _pro_client()
+
+    # ── 讀取圖片 bytes ─────────────────────────────────────────────────────────
+    if image_file:
+        with open(image_file, "rb") as f:
+            image_data = f.read()
+        mime_type, _ = mimetypes.guess_type(image_file)
+        mime_type = mime_type or "image/jpeg"
+
+    elif image_url:
+        req = urllib.request.Request(
+            image_url,
+            headers={"User-Agent": "Mozilla/5.0 AliceBot/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            image_data = resp.read()
+            content_type = resp.headers.get("Content-Type", "image/jpeg")
+            mime_type = content_type.split(";")[0].strip()
+
+    else:
+        raise RuntimeError("analyze_image：需要提供 image_url 或 image_file")
+
+    # ── 呼叫 Gemini Flash（視覺任務用 Flash 速度快且成本低）─────────────────────
+    image_part = types.Part.from_bytes(data=image_data, mime_type=mime_type)
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=[prompt, image_part],
+    )
+
+    text = getattr(response, "text", None)
+    if not text:
+        raise RuntimeError("Gemini 視覺 API 回傳空結果，請稍後重試")
+
+    return text

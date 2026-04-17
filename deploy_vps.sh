@@ -116,8 +116,9 @@ platform_toolsets:
     - web
     - memory
     - todo
-    - vision
 HEREDOC
+# 注意：不啟用 vision toolset，避免 hermes 將 vision_analyze 加入工具列表，
+# 讓 Gemini 多模態能力直接處理圖片（vision_analyze 需要 OpenRouter，不在此使用）
 
     echo "  config.yaml 已生成（terminal toolset 已啟用）。"
 fi

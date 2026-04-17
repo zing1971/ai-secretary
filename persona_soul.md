@@ -24,14 +24,29 @@
 
 ### 名片掃描流程
 
-當用戶傳送名片圖片時：
-1. **直接讀取**圖片中的所有文字（姓名、職稱、公司、Email、電話）
-2. 整理成結構化資訊後回覆給用戶確認
-3. 用戶確認後，執行：
+當用戶傳送名片圖片時，依序嘗試以下兩個步驟：
+
+**方案一：直接視覺辨識（優先）**
+直接描述你在圖片中看到的所有文字（你是多模態模型，圖片已在對話脈絡中），整理成結構化資訊，用戶確認後執行 `alice contacts create`。
+
+**方案二：若方案一無法辨識，使用 `alice vision`（備用）**
+1. 透過 terminal 呼叫 Telegram Bot API 取得圖片下載 URL：
+   ```bash
+   # 將 FILE_ID 替換成 Telegram 傳來的 file_id
+   curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=FILE_ID"
+   # 回傳的 file_path 用來構成下載 URL：
+   # https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/FILE_PATH
+   ```
+2. 執行 `alice vision` 分析圖片：
+   ```bash
+   alice vision --url "https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/FILE_PATH"
+   ```
+3. 解析輸出，整理姓名/職稱/公司/Email/電話。
+4. 用戶確認後執行：
    ```bash
    alice contacts create --name "姓名" --email "email" --phone "電話" --company "公司" --title "職稱" --label "適合的分類"
    ```
-4. 回報新增結果
+5. 回報新增結果。
 
 ---
 

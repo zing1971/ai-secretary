@@ -17,6 +17,8 @@ Usage:
   alice memory remember --topic T --content C
   alice memory recall [--query Q]
   alice memory forget --topic T
+  alice vision --url URL [--prompt P]
+  alice vision --file PATH [--prompt P]
 """
 
 import os
@@ -128,6 +130,26 @@ def _build_parser() -> argparse.ArgumentParser:
     gen.add_argument("--context", default=None,
                      help="背景資訊（可選）：相關事實、參考資料等")
 
+    # ── vision ────────────────────────────────────────────────────────────────
+    vis = sub.add_parser(
+        "vision",
+        help="使用 Gemini 原生視覺分析圖片（名片掃描、圖片文字提取）",
+    )
+    vis_src = vis.add_mutually_exclusive_group(required=True)
+    vis_src.add_argument("--url", default=None,
+                         help="圖片 URL（支援 Telegram file URL、http/https）")
+    vis_src.add_argument("--file", default=None, dest="image_file",
+                         help="本地圖片檔案路徑")
+    vis.add_argument(
+        "--prompt",
+        default=(
+            "這是一張名片。請提取所有可見文字，並以以下格式整理："
+            "姓名、職稱、公司、Email、電話、地址（如有）。"
+            "若欄位不存在請標記 N/A。"
+        ),
+        help="給 Gemini 的分析提示（預設為名片提取）",
+    )
+
     # ── memory ────────────────────────────────────────────────────────────────
     mem = sub.add_parser("memory", help="跨 session 長期記憶")
     mem_sub = mem.add_subparsers(dest="action")
@@ -192,6 +214,14 @@ def _dispatch(args: argparse.Namespace) -> str:
     elif d == "generate":
         from generation_skills import draft_professional_content
         return draft_professional_content(args.task, args.context)
+
+    elif d == "vision":
+        from generation_skills import analyze_image
+        return analyze_image(
+            image_url=args.url,
+            image_file=args.image_file,
+            prompt=args.prompt,
+        )
 
     elif d == "memory":
         from memory_skills import remember, recall, forget
