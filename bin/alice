@@ -1,0 +1,11 @@
+#!/bin/bash
+# Alice Tools - shell wrapper
+# Alice 使用 terminal 工具時呼叫此腳本（PATH 已包含此目錄）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERMES_PYTHON="$HOME/.hermes/hermes-agent/venv/bin/python3"
+
+if [ ! -x "$HERMES_PYTHON" ]; then
+    HERMES_PYTHON="python3"
+fi
+
+exec "$HERMES_PYTHON" "$SCRIPT_DIR/alice_tools.py" "$@"

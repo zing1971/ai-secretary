@@ -106,9 +106,19 @@ platforms:
 
 skills_dir: '${HERMES_DIR}/skills'
 soul_file: '${HERMES_DIR}/SOUL.md'
+
+# 為 telegram 平台明確啟用需要的 toolsets
+platform_toolsets:
+  telegram:
+    - terminal
+    - file
+    - skills
+    - web
+    - memory
+    - todo
 HEREDOC
 
-    echo "  config.yaml 已生成（polling 模式，無 webhook）。"
+    echo "  config.yaml 已生成（terminal toolset 已啟用）。"
 fi
 
 # ── Step 6c: 生成 ~/.hermes/.env（用戶白名單）────────────────
@@ -129,19 +139,113 @@ else
     echo "  ⚠️ 找不到 .env，跳過 ~/.hermes/.env 生成。"
 fi
 
-# ── Step 7: 設定 Google Workspace 技能 ─────────────────────
+# ── Step 7: 部署 alice CLI 工具 ──────────────────────────────
 echo ""
-echo "🔧 Step 7: 部署 Google Workspace 技能..."
+echo "🔧 Step 7: 部署 alice CLI 工具..."
 
-# 移除舊的單一技能檔案（如有），改用拆分後的 skills/ 目錄
+# 確保 bin/ 目錄存在並有執行權限
+chmod +x "$APP_DIR/bin/alice"
+chmod +x "$APP_DIR/bin/alice_tools.py"
+echo "  bin/alice 與 bin/alice_tools.py 已設定執行權限。"
+
+# 移除舊的扁平式技能檔案（前版遺留，已不使用）
 rm -f "$HERMES_DIR/skills/google_workspace_skills.py"
+rm -f "$HERMES_DIR/skills/calendar_skills.py"
+rm -f "$HERMES_DIR/skills/gmail_skills.py"
+rm -f "$HERMES_DIR/skills/tasks_skills.py"
+rm -f "$HERMES_DIR/skills/drive_skills.py"
+rm -f "$HERMES_DIR/skills/contacts_skills.py"
+rm -f "$HERMES_DIR/skills/generation_skills.py"
+rm -f "$HERMES_DIR/skills/memory_skills.py"
+rm -f "$HERMES_DIR/skills/_skill_base.py"
+echo "  舊版扁平式技能檔案已清除。"
 
-# 複製 skills/ 目錄下所有 .py 檔至 hermes skills 目錄
-cp "$APP_DIR/skills/"*.py "$HERMES_DIR/skills/"
-echo "  技能已部署到 $HERMES_DIR/skills/ ($(ls "$APP_DIR/skills/"*.py | wc -l) 個檔案)"
+# 建立 ai-secretary skill 套件（hermes 用 SKILL.md 識別）
+SKILL_DIR="$HERMES_DIR/skills/ai-secretary"
+mkdir -p "$SKILL_DIR"
+
+cat > "$SKILL_DIR/SKILL.md" << 'SKILL_EOF'
+---
+name: ai-secretary
+description: Alice's personal toolset for Google Workspace (Calendar, Gmail, Tasks, Drive, Contacts), Gemini Pro generation, and cross-session memory.
+version: 1.0.0
+author: zing1971
+---
+
+# AI Secretary Tools
+
+Alice 透過 `terminal` 工具執行 `alice` 命令來操作 Google Workspace。
+
+## 命令前綴
+
+```bash
+# alice 命令已加入 PATH，可直接呼叫
+alice <domain> <action> [--arg value ...]
+```
+
+## 行事曆（Calendar）
+
+```bash
+alice calendar list
+alice calendar create --title "週會" --start "2026-04-20 10:00" --end "2026-04-20 11:00"
+alice calendar create --title "週會" --start "2026-04-20 10:00" --end "2026-04-20 11:00" --location "會議室 A" --desc "備註"
+alice calendar create --title "休假" --start "2026-04-25" --end "2026-04-26"
+```
+
+## 信件（Gmail）
+
+```bash
+alice gmail search
+alice gmail search --query "is:unread" --max 10
+alice gmail draft --to "user@example.com" --subject "主旨" --body "內文（換行用 \n）"
+```
+
+## 待辦事項（Tasks）
+
+```bash
+alice tasks list
+alice tasks add --title "任務標題"
+alice tasks add --title "任務標題" --notes "備註" --due "2026-05-01T23:59:59Z"
+```
+
+## 雲端硬碟（Drive）
+
+```bash
+alice drive search --keyword "關鍵字" --max 5
+```
+
+## 聯絡人（Contacts）
+
+```bash
+alice contacts search --query "姓名或公司"
+alice contacts create --name "姓名" --email "email@example.com" --phone "手機" --company "公司" --title "職稱" --label "廠商代表"
+```
+
+可用標籤：政府機關、學術研究、廠商代表、關鍵夥伴、媒體公關、其他
+
+## 起草專業內容（Generate）
+
+使用 Gemini 2.5 Pro 生成高品質正式內容。
+
+```bash
+alice generate --task "任務描述"
+alice generate --task "起草感謝信給王大明董事長" --context "上週在投資論壇引薦了三位重要人士"
+```
+
+## 長期記憶（Memory）
+
+```bash
+alice memory remember --topic "主題" --content "內容"
+alice memory recall
+alice memory recall --query "關鍵字"
+alice memory forget --topic "主題"
+```
+SKILL_EOF
+
+echo "  ~/.hermes/skills/ai-secretary/SKILL.md 已建立。"
 
 # 將 ai-secretary 以 editable 模式安裝至 hermes 的 venv，
-# 讓技能檔可以 import google_auth / gmail_service / calendar_service 等服務模組。
+# 讓 alice_tools.py 可以 import google_auth / gmail_service 等服務模組。
 HERMES_PYTHON="$HERMES_DIR/hermes-agent/venv/bin/python3"
 if [ -f "$HERMES_PYTHON" ]; then
     echo "  以 pip install -e 將 ai-secretary 安裝至 hermes venv..."
@@ -223,7 +327,8 @@ ExecStartPre=/bin/mkdir -p $HERMES_DIR
 
 # 環境變數
 Environment=HERMES_MODEL=gemini-2.5-flash
-Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
+# alice 命令與 hermes venv 均加入 PATH，讓 terminal tool 可直接呼叫
+Environment=PATH=$APP_DIR/bin:$HERMES_DIR/hermes-agent/venv/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONPATH=$APP_DIR
 
 [Install]
