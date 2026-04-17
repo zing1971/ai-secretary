@@ -2,6 +2,9 @@
 Google Tasks 技能：新增待辦任務、列出任務清單。
 """
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+
 from _skill_base import _TASKS_IDX, _require_service
 from tasks_service import create_google_task as _create_task
 from tasks_service import list_tasks as _list_tasks

@@ -2,6 +2,9 @@
 Gmail 技能：搜尋近期信件、建立草稿。
 """
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+
 from _skill_base import _GMAIL_IDX, _require_service
 from gmail_service import create_gmail_draft as _create_gmail_draft
 from gmail_service import get_recent_emails as _get_recent_emails

@@ -2,6 +2,9 @@
 Google Drive 技能：根據關鍵字搜尋檔案。
 """
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+
 from _skill_base import _DRIVE_IDX, _require_service
 from drive_service import DriveService
 

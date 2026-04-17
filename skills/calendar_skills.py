@@ -2,6 +2,9 @@
 Google Calendar 技能：查詢今日行程、建立新行程。
 """
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+
 from _skill_base import _CALENDAR_IDX, _require_service
 from calendar_service import create_event as _create_event
 from calendar_service import get_todays_events as _get_todays_events

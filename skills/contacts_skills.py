@@ -2,6 +2,9 @@
 Google Contacts 技能：建立聯絡人、搜尋聯絡人。
 """
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+
 from _skill_base import _PEOPLE_IDX, _require_service
 from contacts_service import (
     CONTACT_LABELS,
