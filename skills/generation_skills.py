@@ -69,17 +69,23 @@ def analyze_image(
 ) -> str:
     """
     使用 Gemini 原生視覺能力分析圖片（名片掃描、圖片 OCR 等）。
-    直接呼叫 Gemini API，不經過 OpenRouter。
+
+    直接呼叫 Google Generative Language REST API，完全繞過 google-genai SDK，
+    確保不經過 OpenRouter 或任何第三方代理。
 
     Args:
         image_url:  圖片 URL（支援 http/https，包含 Telegram file URL）。
         image_file: 本地圖片檔案路徑（與 image_url 擇一）。
         prompt:     給 Gemini 的分析提示，預設為名片文字提取。
     """
-    import urllib.request
+    import base64
     import mimetypes
+    import urllib.request
+    import json as _json
 
-    client = _pro_client()
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY 未設定")
 
     # ── 讀取圖片 bytes ─────────────────────────────────────────────────────────
     if image_file:
@@ -101,16 +107,36 @@ def analyze_image(
     else:
         raise RuntimeError("analyze_image：需要提供 image_url 或 image_file")
 
-    # ── 呼叫 Gemini Flash（視覺任務用 Flash 速度快且成本低）─────────────────────
-    image_part = types.Part.from_bytes(data=image_data, mime_type=mime_type)
+    # ── 直接呼叫 Google REST API（繞過 SDK，避免 hermes OpenRouter 代理）──────
+    image_b64 = base64.b64encode(image_data).decode("utf-8")
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[prompt, image_part],
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {"inline_data": {"mime_type": mime_type, "data": image_b64}},
+            ]
+        }],
+        "generationConfig": {"maxOutputTokens": 1024},
+    }
+
+    api_url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.5-flash:generateContent?key={api_key}"
     )
 
-    text = getattr(response, "text", None)
-    if not text:
-        raise RuntimeError("Gemini 視覺 API 回傳空結果，請稍後重試")
+    req = urllib.request.Request(
+        api_url,
+        data=_json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        result = _json.loads(resp.read().decode("utf-8"))
+
+    try:
+        text = result["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as exc:
+        raise RuntimeError(f"Gemini 視覺 API 回傳格式異常：{result}") from exc
 
     return text
