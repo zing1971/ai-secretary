@@ -46,26 +46,44 @@ def get_credentials():
     if not creds and os.path.exists(_TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(_TOKEN_PATH, SCOPES)
     
+    # 判斷是否為無顯示器的非互動環境（VPS / systemd）
+    import sys
+    _is_headless = not sys.stdin.isatty() or not os.environ.get("DISPLAY", os.environ.get("TERM_PROGRAM", ""))
+
     # 如果沒有有效的憑證，讓使用者登入或重新整理
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
             except Exception as e:
+                if _is_headless:
+                    raise RuntimeError(
+                        f"Google Token 刷新失敗（{e}）。\n"
+                        "請在本機重新執行 OAuth 授權並上傳新的 token.json：\n"
+                        "  1. 本機執行：python -c \"from google_auth import get_credentials; get_credentials()\"\n"
+                        "  2. 上傳：scp credentials.json token.json <user>@<VPS_IP>:~/ai-secretary/\n"
+                        "  3. VPS 重啟：sudo systemctl restart ai-secretary"
+                    ) from e
                 print(f"Token 刷新失敗: {e}")
-                creds = None  # 強制重新登入流程
-        
+                creds = None  # 強制重新登入流程（僅本機互動環境）
+
         if not creds:
+            if _is_headless:
+                raise RuntimeError(
+                    "Google OAuth 憑證無效且無法在非互動環境下重新授權。\n"
+                    "請在本機重新執行 OAuth 授權並上傳新的 token.json：\n"
+                    "  1. 本機執行：python -c \"from google_auth import get_credentials; get_credentials()\"\n"
+                    "  2. 上傳：scp credentials.json token.json <user>@<VPS_IP>:~/ai-secretary/\n"
+                    "  3. VPS 重啟：sudo systemctl restart ai-secretary"
+                )
+
             # 支援從環境變數讀取 credentials (Cloud Run 必備)
             creds_env = os.getenv("GOOGLE_CREDENTIALS_JSON")
             if creds_env:
                 try:
                     creds_data = json.loads(creds_env)
                     flow = InstalledAppFlow.from_client_config(creds_data, SCOPES)
-                    if not os.environ.get("DEPLOY_ENV") == "cloud":
-                        creds = flow.run_local_server(port=8080)
-                    else:
-                        print("⚠️ 雲端環境且 Token 失效，請在本地執行 update_auth_and_cloud.py 更新 Token")
+                    creds = flow.run_local_server(port=8080)
                 except Exception as e:
                     print(f"從環境變數讀取 Credentials 失敗: {e}")
 
