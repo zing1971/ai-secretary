@@ -1,5 +1,9 @@
 import datetime
+import logging
 import pytz
+
+logger = logging.getLogger(__name__)
+
 
 def format_event_time(date_str: str) -> str:
     """將 ISO 時間字串轉換為閱讀友善的台北時間"""
@@ -7,12 +11,13 @@ def format_event_time(date_str: str) -> str:
         # 處理純日期 (全天行程)
         if 'T' not in date_str:
             return date_str
-            
+
         dt = datetime.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
         tz = pytz.timezone('Asia/Taipei')
         dt_taipei = dt.astimezone(tz)
         return dt_taipei.strftime("%Y-%m-%d %H:%M")
-    except Exception:
+    except (ValueError, AttributeError) as e:
+        logger.debug(f"format_event_time 解析失敗（{date_str!r}）：{e}")
         return date_str
 
 def get_events(service, time_min: str, time_max: str, query: str = None):
@@ -60,8 +65,12 @@ def get_events(service, time_min: str, time_max: str, query: str = None):
 
 def get_todays_events(service):
     """取得今日全天的行事曆行程。供被動觸發使用。"""
-    now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' 表示 UTC 時間
-    today_end = datetime.datetime.utcnow().replace(hour=23, minute=59, second=59).isoformat() + 'Z'
+    # 使用 timezone-aware datetime（datetime.utcnow() 已在 Python 3.12 棄用）
+    utc = datetime.timezone.utc
+    now = datetime.datetime.now(utc).isoformat()
+    today_end = datetime.datetime.now(utc).replace(
+        hour=23, minute=59, second=59, microsecond=0
+    ).isoformat()
     return get_events(service, now, today_end)
 
 

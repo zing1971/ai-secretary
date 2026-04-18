@@ -102,6 +102,9 @@ def main() -> None:
     except FileNotFoundError:
         logger.error("找不到 hermes 指令，請確認已安裝 hermes-agent 套件。")
         sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"hermes gateway 異常退出，return code: {e.returncode}")
+        sys.exit(e.returncode)
     except KeyboardInterrupt:
         logger.info("收到中斷訊號，正在關閉...")
 

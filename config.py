@@ -41,10 +41,7 @@ def _get_env(key, default=None):
 def _clean_api_key(api_key: str) -> str:
     if not api_key:
         return ""
-    api_key = api_key.strip().replace('"', '').replace("'", "")
-    if len(api_key) == 78:
-        api_key = api_key[:39]
-    return api_key
+    return api_key.strip().replace('"', '').replace("'", "")
 
 
 class Config:

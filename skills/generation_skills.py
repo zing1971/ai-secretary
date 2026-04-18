@@ -81,6 +81,7 @@ def analyze_image(
     import base64
     import mimetypes
     import urllib.request
+    import urllib.parse
     import json as _json
 
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -120,10 +121,10 @@ def analyze_image(
         "generationConfig": {"maxOutputTokens": 1024},
     }
 
-    api_url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={api_key}"
-    )
+    # API key 以 query param 傳送（Google REST API 標準做法）
+    # 使用 urlencode 確保 key 不直接出現在 f-string 中（避免 traceback 洩漏）
+    _base = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    api_url = f"{_base}?{urllib.parse.urlencode({'key': api_key})}"
 
     req = urllib.request.Request(
         api_url,
@@ -137,6 +138,13 @@ def analyze_image(
     try:
         text = result["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError) as exc:
-        raise RuntimeError(f"Gemini 視覺 API 回傳格式異常：{result}") from exc
+        # 僅記錄安全摘要，避免將完整 result（可能含請求資訊）洩漏至錯誤訊息
+        candidates = result.get("candidates", [])
+        finish_reason = (
+            candidates[0].get("finishReason", "unknown") if candidates else "no_candidates"
+        )
+        raise RuntimeError(
+            f"Gemini 視覺 API 回傳格式異常，finishReason={finish_reason}"
+        ) from exc
 
     return text
