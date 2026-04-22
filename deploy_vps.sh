@@ -98,7 +98,7 @@ else
     set +o allexport
 
     cat > "$HERMES_DIR/config.yaml" << HEREDOC
-model: gemini-2.5-flash
+model: gemini:gemini-1.5-flash
 
 platforms:
   telegram:
@@ -337,8 +337,10 @@ RestartSec=60
 ExecStartPre=/bin/mkdir -p $HERMES_DIR
 
 # ?啣?霈
-Environment=HERMES_MODEL=gemini-2.5-flash
-# alice ?賭誘??hermes venv ????PATH嚗? terminal tool ?舐?亙??
+# 授權與環境變數 (將 GEMINI_API_KEY 對應到 hermes 預期的 GOOGLE_API_KEY)
+Environment=GOOGLE_API_KEY=${GEMINI_API_KEY}
+Environment=HERMES_MODEL=gemini:gemini-1.5-flash
+# alice 工具路徑
 Environment=PATH=/home/$USER/ai-secretary/bin:/home/$USER/.hermes/hermes-agent/venv/bin:/home/$USER/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONPATH=$APP_DIR
 

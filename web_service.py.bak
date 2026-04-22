@@ -1,0 +1,42 @@
+import requests
+from bs4 import BeautifulSoup
+from duckduckgo_search import DDGS
+from config import logger
+
+class WebService:
+    def __init__(self):
+        self.ddgs = DDGS()
+
+    def search_web(self, query: str, max_results: int = 3) -> list:
+        """搜尋網路並回傳結果"""
+        try:
+            logger.info(f"執行 Web Search: {query}")
+            results = list(self.ddgs.text(query, region='tw-tz', safesearch='moderate', max_results=max_results))
+            return results
+        except Exception as e:
+            logger.error(f"Web Search 失敗: {e}")
+            return []
+
+    def fetch_url_content(self, url: str) -> str:
+        """抓取網頁的純文字內容"""
+        try:
+            logger.info(f"讀取 URL: {url}")
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            # 限制 timeout 避免卡住
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # 移除非文字結構
+            for element in soup(["script", "style", "nav", "footer", "header"]):
+                element.extract()
+
+            text = soup.get_text(separator='\n', strip=True)
+            # 限制長度避免爆 Token
+            return text[:6000] 
+        except Exception as e:
+            logger.error(f"讀取 URL 內容失敗: {e}")
+            return f"讀取網頁失敗: {e}"

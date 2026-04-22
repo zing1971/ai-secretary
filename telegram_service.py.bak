@@ -1,0 +1,87 @@
+import asyncio
+from telegram.ext import Application
+from config import Config, logger
+
+class TelegramService:
+    def __init__(self, app: Application = None):
+        """
+        :param app: python-telegram-bot 的 Application 實例
+        """
+        self.app = app
+        self.user_id = str(Config.TELEGRAM_USER_ID)
+
+    async def push_text_async(self, text: str, to_user_id: str = None):
+        target = to_user_id or self.user_id
+        try:
+            await self.app.bot.send_message(chat_id=target, text=text)
+            logger.info(f"成功推送 Telegram 訊息至 {target}")
+            return True
+        except Exception as e:
+            logger.error(f"Telegram 推送訊息失敗: {e}")
+            return False
+
+    def push_text(self, text: str, to_user_id: str = None):
+        """同步包裝，供非同步外部呼叫（例如從 ActionDispatcher、Scheduler）使用
+        如果已經在 asyncio loop 裡面，就產生 task；否則用 run_until_complete。"""
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.push_text_async(text, to_user_id))
+            return True
+        except RuntimeError:
+            # 如果沒有 event loop，使用 asyncio.run
+            asyncio.run(self.push_text_async(text, to_user_id))
+            return True
+
+    async def reply_text_async(self, chat_id: str, text: str, reply_to_message_id: int = None):
+        """回覆給指定的 chat_id"""
+        try:
+            await self.app.bot.send_message(
+                chat_id=chat_id, 
+                text=text, 
+                reply_to_message_id=reply_to_message_id
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Telegram 回覆訊息失敗: {e}")
+            return False
+
+    def reply_text(self, chat_id: str, text: str, reply_to_message_id: int = None):
+        """同步包裝的回覆"""
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.reply_text_async(chat_id, text, reply_to_message_id))
+            return True
+        except RuntimeError:
+            asyncio.run(self.reply_text_async(chat_id, text, reply_to_message_id))
+            return True
+
+    async def get_message_content_async(self, file_id: str) -> bytes:
+        """取得 Telegram 檔案二進位"""
+        try:
+            file = await self.app.bot.get_file(file_id)
+            byte_array = await file.download_as_bytearray()
+            return bytes(byte_array)
+        except Exception as e:
+            logger.error(f"Telegram 取得訊息內容失敗: {e}")
+            return None
+
+    def get_message_content(self, file_id: str) -> bytes:
+        """同步包裝取得檔案，為了配合原有 dispatcher 架構"""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # 如果已經在 running loop，嘗試透過 asyncio.run_coroutine_threadsafe？
+                # 因為 ActionDispatcher 可能是跑在 asyncio thread 或 threadpool
+                import threading
+                def _run_in_new_loop():
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    res = new_loop.run_until_complete(self.get_message_content_async(file_id))
+                    new_loop.close()
+                    return res
+                # 如果是在同樣的 thread 會阻塞，先試試看偷懶作法... 這邊主要是讓圖片順利下載
+                raise NotImplementedError("在目前的非同步設計中，請使用 await get_message_content_async")
+            else:
+                return asyncio.run(self.get_message_content_async(file_id))
+        except RuntimeError:
+            return asyncio.run(self.get_message_content_async(file_id))

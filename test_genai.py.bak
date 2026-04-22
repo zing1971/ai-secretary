@@ -1,0 +1,23 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
+from google import genai
+from google.genai import types
+from config import Config
+
+def search_web(query: str) -> str:
+    """搜尋網路上的即時資訊或新聞。"""
+    print(f"Executing search_web... query: {query}")
+    return f"台積電最新股價為 1000 元，這是來自網路的即時資料。"
+
+client = genai.Client(api_key=Config.GEMINI_API_KEY)
+chat = client.chats.create(
+    model='gemini-2.0-flash',
+    config=types.GenerateContentConfig(
+        tools=[search_web],
+        system_instruction="你是一位秘書，請使用工具搜尋資料後回答問題。",
+        temperature=0.0
+    )
+)
+res = chat.send_message("台積電今天多少錢？可以跑工具幫我上網查看看嗎")
+print("Response text:", res.text)
