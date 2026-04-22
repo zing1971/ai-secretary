@@ -2,7 +2,13 @@
 # Alice Tools - shell wrapper
 # Alice 使用 terminal 工具時呼叫此腳本（PATH 已包含此目錄）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HERMES_PYTHON="$HOME/.hermes/hermes-agent/venv/bin/python3"
+# 優先使用專案目錄下的 venv
+HERMES_PYTHON="$HOME/ai-secretary/venv/bin/python3"
+
+# 若不存在，嘗試備用的 hermes 預設目錄
+if [ ! -x "$HERMES_PYTHON" ]; then
+    HERMES_PYTHON="$HOME/.hermes/hermes-agent/venv/bin/python3"
+fi
 
 if [ ! -x "$HERMES_PYTHON" ]; then
     HERMES_PYTHON="python3"

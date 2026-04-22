@@ -108,11 +108,13 @@ def main() -> None:
 
     delete_webhook(Config.TELEGRAM_BOT_TOKEN)
 
-    logger.info("🤖 啟動 Hermes Gateway（polling 模式）...")
-    # 確保 GOOGLE_API_KEY 與 HERMES_MODEL 正確傳遞給子進程
+    # 確保環境變數正確傳遞給子進程
     env = os.environ.copy()
     env["GOOGLE_API_KEY"] = Config.GEMINI_API_KEY
     env["HERMES_MODEL"] = "google/gemini-1.5-flash"
+    env["PYTHONPATH"] = os.getcwd()
+    
+    logger.info(f"🤖 啟動 Hermes Gateway（polling 模式），使用模型：{env['HERMES_MODEL']}")
     
     try:
         subprocess.run(["hermes", "gateway", "run"], check=True, env=env)

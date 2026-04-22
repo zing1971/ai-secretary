@@ -160,16 +160,17 @@ rm -f "$HERMES_DIR/skills/memory_skills.py"
 rm -f "$HERMES_DIR/skills/_skill_base.py"
 echo "  Old skills cleaned up."
 
-# Step 7b: Linking ai-secretary to hermes venv
+# Step 7b: Linking ai-secretary to venv
 echo ""
-echo "-> Step 7b: Linking ai-secretary to hermes venv..."
+echo "-> Step 7b: Linking ai-secretary to local venv..."
 
-HERMES_PYTHON="$HERMES_DIR/hermes-agent/venv/bin/python3"
-if [ -f "$HERMES_PYTHON" ]; then
-    "$HERMES_PYTHON" -m pip install --quiet -e "$APP_DIR"
-    echo "  Success: ai-secretary linked."
+# 統一使用 ~/ai-secretary/venv
+VENV_PYTHON="$APP_DIR/venv/bin/python3"
+if [ -f "$VENV_PYTHON" ]; then
+    "$VENV_PYTHON" -m pip install --quiet -e "$APP_DIR"
+    echo "  Success: ai-secretary linked to $VENV_PYTHON."
 else
-    echo "  Warning: hermes venv ($HERMES_PYTHON) not found. Skipping link."
+    echo "  Warning: venv not found at $VENV_PYTHON. Skipping link."
 fi
 
 # Step 8: Validate Environment
