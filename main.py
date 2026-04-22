@@ -16,6 +16,7 @@ import subprocess
 import logging
 import requests
 
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -108,8 +109,13 @@ def main() -> None:
     delete_webhook(Config.TELEGRAM_BOT_TOKEN)
 
     logger.info("🤖 啟動 Hermes Gateway（polling 模式）...")
+    # 確保 GOOGLE_API_KEY 與 HERMES_MODEL 正確傳遞給子進程
+    env = os.environ.copy()
+    env["GOOGLE_API_KEY"] = Config.GEMINI_API_KEY
+    env["HERMES_MODEL"] = "google/gemini-1.5-flash"
+    
     try:
-        subprocess.run(["hermes", "gateway", "run"], check=True)
+        subprocess.run(["hermes", "gateway", "run"], check=True, env=env)
     except FileNotFoundError:
         logger.error("找不到 hermes 指令，請確認已安裝 hermes-agent 套件。")
         sys.exit(1)

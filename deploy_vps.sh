@@ -95,7 +95,7 @@ else
     set +o allexport
 
     cat > "$HERMES_DIR/config.yaml" << HEREDOC
-model: gemini:gemini-1.5-flash
+model: google/gemini-1.5-flash
 
 platforms:
   telegram:
@@ -231,7 +231,7 @@ RestartSec=60
 # Ensure environment
 ExecStartPre=/bin/mkdir -p $HERMES_DIR
 Environment=GOOGLE_API_KEY=${GEMINI_API_KEY}
-Environment=HERMES_MODEL=gemini:gemini-1.5-flash
+Environment=HERMES_MODEL=google/gemini-1.5-flash
 Environment=PATH=/home/$USER/ai-secretary/bin:/home/$USER/.hermes/hermes-agent/venv/bin:/home/$USER/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONPATH=$APP_DIR
 
