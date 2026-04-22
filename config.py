@@ -66,18 +66,20 @@ class Config:
         missing = []
         if not cls.TELEGRAM_BOT_TOKEN:
             missing.append("TELEGRAM_BOT_TOKEN")
-        if not cls.TELEGRAM_CHAT_ID:
-            missing.append("TELEGRAM_CHAT_ID")
         if not cls.GEMINI_API_KEY:
             missing.append("GEMINI_API_KEY")
         if not cls.GOOGLE_SHEET_ID:
             missing.append("GOOGLE_SHEET_ID")
 
         if missing:
-            logger.error(f"❌ 缺少環境變數: {', '.join(missing)}")
+            logger.error(f"❌ 缺少必要環境變數: {', '.join(missing)}")
             return False
 
-        logger.info("✅ 環境變數驗證通過。")
+        if not cls.TELEGRAM_CHAT_ID:
+            logger.warning("⚠️ 缺少 TELEGRAM_CHAT_ID，目前處於「未配對模式」。請傳送訊息給機器人並在日誌中查看您的 Chat ID。")
+        else:
+            logger.info("✅ 環境變數驗證通過。")
+            
         return True
 
 

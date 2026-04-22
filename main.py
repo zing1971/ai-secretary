@@ -94,6 +94,17 @@ def main() -> None:
 
     sync_persona()
     inject_memory_to_soul()
+
+    # 處理未配對模式的特別說明
+    if not Config.TELEGRAM_CHAT_ID:
+        soul_path = os.path.expanduser("~/.hermes/SOUL.md")
+        with open(soul_path, "a", encoding="utf-8") as f:
+            f.write("\n\n---\n")
+            f.write("**系統提示：目前處於「未配對模式」**\n")
+            f.write("使用者尚未設定 TELEGRAM_CHAT_ID。如果使用者詢問自己的 ID，請查看訊息上下文中的 chat_id 並告知他們。\n")
+            f.write("引導使用者將該 ID 填入 .env 檔案中的 TELEGRAM_CHAT_ID 欄位並重啟服務。\n")
+        logger.warning("🕒 偵測到未配對，已將配對引導指令注入 SOUL.md")
+
     delete_webhook(Config.TELEGRAM_BOT_TOKEN)
 
     logger.info("🤖 啟動 Hermes Gateway（polling 模式）...")
