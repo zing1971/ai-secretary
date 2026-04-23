@@ -74,103 +74,79 @@ class TelegramService:
 
     def send_main_menu(self, chat_id: str = None) -> bool:
         """
-        傳送互動式 Inline Keyboard 主選單。
-        2 欄 × 3 列，共 6 個快捷按鈕。
+        傳送純文字主選單提示 (配合 Hermes 對話介面)
         """
         target = chat_id or self.chat_id
-        keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": "📊 今日總覽", "callback_data": "今天摘要"},
-                    {"text": "📅 行程安排", "callback_data": "未來兩天行程"},
-                ],
-                [
-                    {"text": "✅ 待辦事項", "callback_data": "列出待辦事項"},
-                    {"text": "📧 郵件中心", "callback_data": "進入郵件處理中心"},
-                ],
-                [
-                    {"text": "📚 知識搜尋", "callback_data": "開啟專業知識庫"},
-                    {"text": "⚙️ 系統設定", "callback_data": "查看個人偏好與設定"},
-                ],
-                [
-                    {"text": "👥 整理聯絡人", "callback_data": "幫聯絡人貼標籤"},
-                    {"text": "☁️ 整理雲端", "callback_data": "整理雲端"},
-                ],
-            ]
-        }
-        return self._send_message(target, "📋 AI 秘書主選單", reply_markup=keyboard)
+        text = (
+            "📋 **AI 秘書主選單**\n\n"
+            "您可以隨時對我說以下指令：\n"
+            "• 「今天摘要」：查看今日總覽\n"
+            "• 「未來兩天行程」：查看行程安排\n"
+            "• 「列出待辦事項」：查看待辦清單\n"
+            "• 「進入郵件處理中心」：處理電子郵件\n"
+            "• 「開啟專業知識庫」：搜尋或提問專業知識\n"
+            "• 「查看個人偏好與設定」：管理系統設定\n"
+            "• 「幫聯絡人貼標籤」或「整理雲端」"
+        )
+        return self._send_message(target, text, parse_mode="Markdown")
 
     def send_context_menu(self, context_type: str, chat_id: str = None) -> bool:
-        """傳送特定情境的快捷選單"""
+        """傳送特定情境的純文字選單"""
         target = chat_id or self.chat_id
-        keyboard = None
         text = ""
 
         if context_type == "morning_briefing":
-            keyboard = {
-                "inline_keyboard": [
-                    [
-                        {"text": "✏️ 幫我起草重要回信", "callback_data": "幫我起草今天重要信件的回覆"},
-                        {"text": "📝 記錄至待辦事項", "callback_data": "把簡報中的重點加入待辦清單"},
-                    ]
-                ]
-            }
-            text = "💡 請問需要為您執行哪些後續動作？"
+            text = (
+                "💡 **後續動作建議**\n"
+                "您可以對我說：\n"
+                "• 「幫我起草今天重要信件的回覆」\n"
+                "• 「把簡報中的重點加入待辦清單」"
+            )
 
-        if keyboard and text:
-            return self._send_message(target, text, reply_markup=keyboard)
+        if text:
+            return self._send_message(target, text, parse_mode="Markdown")
         return False
 
     def send_email_menu(self, chat_id: str = None) -> bool:
-        """傳送郵件中心功能選單"""
+        """傳送郵件中心功能選單 (純文字)"""
         target = chat_id or self.chat_id
-        keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": "📊 摘要重要信件", "callback_data": "幫我挑三到五封重要信件摘要"},
-                    {"text": "🔍 搜尋特定信件", "callback_data": "我要找信件"}
-                ],
-                [
-                    {"text": "✏️ 我想草擬回信", "callback_data": "幫我草擬回信"},
-                    {"text": "🔙 返回主選單", "callback_data": "menu"}
-                ]
-            ]
-        }
-        return self._send_message(target, "📧 【郵件中心】\n仁哥，請問您想如何處理電子郵件？", reply_markup=keyboard)
+        text = (
+            "📧 **【郵件中心】**\n"
+            "仁哥，請問您想如何處理電子郵件？您可以對我說：\n"
+            "• 「幫我挑三到五封重要信件摘要」\n"
+            "• 「我要找信件...」\n"
+            "• 「幫我草擬回信...」\n"
+            "• 「返回主選單」"
+        )
+        return self._send_message(target, text, parse_mode="Markdown")
 
     def send_knowledge_menu(self, chat_id: str = None) -> bool:
-        """傳送知識庫導引選單"""
+        """傳送知識庫導引選單 (純文字)"""
         target = chat_id or self.chat_id
-        keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": "🛡️ 資安防護", "callback_data": "資安專業知識查詢"},
-                    {"text": "💻 資訊技術", "callback_data": "IT技術架構查詢"}
-                ],
-                [
-                    {"text": "📈 科技趨勢", "callback_data": "最新科技趨勢分析"},
-                    {"text": "🌐 外部搜尋", "callback_data": "上網搜尋相關資訊"}
-                ]
-            ]
-        }
-        return self._send_message(target, "📚 【專業知識庫】\n仁哥，請問您想查詢哪個領域的知識？或是需要 Alice 上網幫您查證最新的國內外情資呢？", reply_markup=keyboard)
+        text = (
+            "📚 **【專業知識庫】**\n"
+            "仁哥，請問您想查詢哪個領域的知識？或是需要 Alice 上網幫您查證最新的國內外情資呢？\n"
+            "您可以說：\n"
+            "• 「查詢資安專業知識...」\n"
+            "• 「查詢 IT 技術架構...」\n"
+            "• 「分析最新科技趨勢...」\n"
+            "• 「幫我上網搜尋...」"
+        )
+        return self._send_message(target, text, parse_mode="Markdown")
 
     def send_settings_menu(self, memories_summary: str, chat_id: str = None) -> bool:
-        """傳送系統與偏好設定選單"""
+        """傳送系統與偏好設定選單 (純文字)"""
         target = chat_id or self.chat_id
-        keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": "📝 新增個人備忘", "callback_data": "記住我的新偏好"},
-                    {"text": "🔄 重寫偏好摘要", "callback_data": "總結目前我記住的事情"}
-                ],
-                [
-                    {"text": "🔙 返回主選單", "callback_data": "menu"}
-                ]
-            ]
-        }
-        text = f"⚙️ 【系統設定與個人化記憶】\n目前 Alice 腦袋裡的「仁哥檔案」：\n\n{memories_summary}\n\n請問需要協助更新或調整哪一部分嗎？"
-        return self._send_message(target, text, reply_markup=keyboard)
+        text = (
+            f"⚙️ **【系統設定與個人化記憶】**\n"
+            f"目前 Alice 腦袋裡的「仁哥檔案」：\n\n"
+            f"{memories_summary}\n\n"
+            f"請問需要協助更新或調整哪一部分嗎？您可以對我說：\n"
+            f"• 「記住我的新偏好...」\n"
+            f"• 「總結目前我記住的事情」\n"
+            f"• 「返回主選單」"
+        )
+        return self._send_message(target, text, parse_mode="Markdown")
 
     # ── 內部工具 ──────────────────────────────────────────────────────────────
 

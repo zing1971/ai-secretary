@@ -31,7 +31,7 @@ if [ -z "$GEMINI_API_KEY" ]; then
 fi
 
 echo "🌐 啟動 Hermes Gateway..."
-export HERMES_MODEL="gemini:gemini-2.5-flash"  # 或您習慣的 Gemini 模型
+export HERMES_MODEL="gemini-1.5-flash"  # 使用 Google 原生 Gemini 1.5 Flash 模型
 
 # 將當前專案目錄加入 PYTHONPATH，這樣 google_workspace_skills.py 就能正確 import 其他檔案
 export PYTHONPATH="$PWD:$PYTHONPATH"

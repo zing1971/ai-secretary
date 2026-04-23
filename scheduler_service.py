@@ -31,6 +31,19 @@ def execute_morning_briefing(dispatcher, messaging_service):
         if hasattr(messaging_service, 'send_context_menu'):
             messaging_service.send_context_menu("morning_briefing")
             
+        # 將簡報寫入 SOUL.md，讓 Hermes Agent 擁有上下文
+        import os
+        from datetime import datetime
+        soul_path = os.path.expanduser("~/.hermes/SOUL.md")
+        if os.path.exists(soul_path):
+            try:
+                with open(soul_path, "a", encoding="utf-8") as f:
+                    today = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    f.write(f"\n\n---\n**系統紀錄 ({today})：已向使用者發送早安簡報**\n簡報內容如下：\n{report}\n")
+                logger.info("💾 已將早安簡報注入 SOUL.md 上下文")
+            except Exception as io_err:
+                logger.warning(f"寫入 SOUL.md 失敗: {io_err}")
+
         logger.info("✅ 早安簡報推送成功！")
         return push_msg
     except Exception as e:

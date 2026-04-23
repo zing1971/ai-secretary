@@ -34,8 +34,21 @@ def _require_service(index: int, name: str) -> object:
     return service
 
 
+from functools import wraps
+
+def safe_tool(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            return f"❌ 技能執行失敗：{str(e)}。請提醒使用者檢查授權或系統設定。"
+    return wrapper
+
 # ── 技能函數 ────────────────────────────────────────────────
 
+
+@safe_tool
 def get_todays_calendar_events() -> str:
     """
     取得今日全天的行事曆行程，並格式化為字串回傳。
@@ -48,6 +61,7 @@ def get_todays_calendar_events() -> str:
     return "\n".join(events)
 
 
+@safe_tool
 def search_recent_gmails(query: str = None, max_results: int = 10) -> str:
     """
     搜尋並取得近期的 Gmail 信件。
@@ -73,6 +87,7 @@ def search_recent_gmails(query: str = None, max_results: int = 10) -> str:
     return "\n\n".join(lines)
 
 
+@safe_tool
 def create_email_draft(
     to_email: str,
     subject: str,
@@ -95,6 +110,7 @@ def create_email_draft(
     return f"✅ 草稿已建立！草稿 ID: {draft['id']}"
 
 
+@safe_tool
 def add_google_task(
     title: str,
     notes: str = None,
@@ -115,6 +131,7 @@ def add_google_task(
     return f"✅ 已建立任務：{title}"
 
 
+@safe_tool
 def list_google_tasks() -> str:
     """
     列出預設清單中的所有 Google Tasks 待辦任務。
@@ -126,6 +143,7 @@ def list_google_tasks() -> str:
     return "\n".join(tasks)
 
 
+@safe_tool
 def search_drive_files(keyword: str, max_results: int = 5) -> str:
     """
     根據關鍵字搜尋 Google Drive 中的檔案（包含檔名與內文）。

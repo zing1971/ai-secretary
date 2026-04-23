@@ -72,25 +72,21 @@ def get_credentials():
                 creds.refresh(Request())
             except Exception as e:
                 if _is_headless:
-                    raise RuntimeError(
+                    logger.error(
                         f"Google Token 刷新失敗（{e}）。\n"
-                        "請在本機重新執行 OAuth 授權並上傳新的 token.json：\n"
-                        "  1. 本機執行：python -c \"from google_auth import get_credentials; get_credentials()\"\n"
-                        "  2. 上傳：gcloud compute scp credentials.json token.json <user>@<instance>:/home/<user>/ai-secretary/ --zone=<zone>\n"
-                        "  3. VPS 重啟：sudo systemctl restart ai-secretary"
-                    ) from e
+                        "請在本機重新執行 OAuth 授權並上傳新的 token.json"
+                    )
+                    return None
                 logger.warning(f"Token 刷新失敗: {e}，將重新執行授權流程")
                 creds = None  # 強制重新登入流程（僅本機互動環境）
 
         if not creds:
             if _is_headless:
-                raise RuntimeError(
+                logger.error(
                     "Google OAuth 憑證無效且無法在非互動環境下重新授權。\n"
-                    "請在本機重新執行 OAuth 授權並上傳新的 token.json：\n"
-                    "  1. 本機執行：python -c \"from google_auth import get_credentials; get_credentials()\"\n"
-                    "  2. 上傳：gcloud compute scp credentials.json token.json <user>@<instance>:/home/<user>/ai-secretary/ --zone=<zone>\n"
-                    "  3. VPS 重啟：sudo systemctl restart ai-secretary"
+                    "請在本機重新執行 OAuth 授權並上傳新的 token.json"
                 )
+                return None
 
             # 支援從環境變數讀取 credentials (Cloud Run 必備)
             creds_env = os.getenv("GOOGLE_CREDENTIALS_JSON")
