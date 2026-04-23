@@ -28,28 +28,61 @@ logger = logging.getLogger("AI-Secretary")
 
 def patch_hermes_config() -> None:
     """
-    自動修復 ~/.hermes/config.yaml 中殘留的錯誤 Model ID (例如 gemini/gemini-1.5-flash)
-    確保其強制修正為 gemini-1.5-flash，避免引發 HTTP 400 錯誤。
+    強制覆寫 ~/.hermes/config.yaml 的 model 區段，確保使用正確的：
+    - provider: gemini（Google AI Studio）
+    - base_url: Google 的 OpenAI 相容端點（v1beta/openai）
+    - model: gemini-1.5-flash
+    - api_key: 從 GEMINI_API_KEY / GOOGLE_API_KEY 注入
+
+    根本原因：Hermes 的 gemini provider 預設 base_url 為 v1beta（純 REST），
+    但 Hermes 使用 OpenAI 格式發送請求，需改用 v1beta/openai 相容端點。
     """
     config_path = os.path.expanduser("~/.hermes/config.yaml")
-    if not os.path.exists(config_path):
-        return
+
+    # 取得 API Key
+    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")
+
+    # 正確的 Google OpenAI 相容端點
+    google_openai_base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
 
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            content = f.read()
+        # 讀取現有設定（若存在）
+        existing_content = ""
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                existing_content = f.read()
 
-        # 使用正規表示式匹配可能帶有前綴的 model: 宣告，將其替換為標準的 model: gemini-1.5-flash
-        new_content = re.sub(
-            r'model:\s*(gemini/|google/)?gemini-1.5-flash.*',
-            'model: gemini-1.5-flash',
-            content
+        # 強制覆寫 model 區段（保留其他設定不動）
+        # 若已存在 model 區段則替換，否則在開頭插入
+        model_block = (
+            "model:\n"
+            f"  default: gemini-1.5-flash\n"
+            f"  provider: gemini\n"
+            f"  base_url: {google_openai_base_url}\n"
+            + (f"  api_key: {api_key}\n" if api_key else "")
         )
 
-        if new_content != content:
-            with open(config_path, "w", encoding="utf-8") as f:
-                f.write(new_content)
-            logger.info("🔧 已自動修復 ~/.hermes/config.yaml 中的模型名稱為 gemini-1.5-flash")
+        # 使用正規表示式替換整個 model: 區段（多行匹配）
+        # 匹配 model: 開頭直到下一個頂層 key（不含空格）或檔案結尾
+        new_content = re.sub(
+            r'^model:.*?(?=^\S|\Z)',
+            model_block,
+            existing_content,
+            flags=re.MULTILINE | re.DOTALL
+        )
+
+        # 若原始內容中沒有 model: 區段，則在開頭加上
+        if "model:" not in existing_content:
+            new_content = model_block + "\n" + existing_content
+
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+        logger.info(
+            f"🔧 已修復 ~/.hermes/config.yaml："
+            f"provider=gemini, model=gemini-1.5-flash, base_url={google_openai_base_url}"
+        )
     except Exception as e:
         logger.warning(f"⚠️  修復 config.yaml 時發生例外：{e}")
 
@@ -138,15 +171,18 @@ def main() -> None:
 
     delete_webhook(Config.TELEGRAM_BOT_TOKEN)
 
-    # 確保環境變數正確傳遞給子進程，並強制指定 Google 原生 Provider
+    # 確保環境變數正確傳遞給子進程，強制使用 gemini provider
     env = os.environ.copy()
     env["GEMINI_API_KEY"] = Config.GEMINI_API_KEY
     env["GOOGLE_API_KEY"] = Config.GEMINI_API_KEY
-    env["HERMES_MODEL"] = "gemini-1.5-flash"
+    # HERMES_INFERENCE_PROVIDER 告訴 Hermes 使用 gemini provider
+    env["HERMES_INFERENCE_PROVIDER"] = "gemini"
+    # GEMINI_BASE_URL 覆寫 provider 預設 base_url，指向 OpenAI 相容端點
+    env["GEMINI_BASE_URL"] = "https://generativelanguage.googleapis.com/v1beta/openai"
     env["LITELLM_LOGGING_LEVEL"] = "ERROR"
     env["PYTHONPATH"] = os.getcwd()
-    
-    logger.info(f"🤖 啟動 Hermes Gateway（polling 模式），使用模型：{env['HERMES_MODEL']}")
+
+    logger.info("🤖 啟動 Hermes Gateway（polling 模式），使用 gemini provider + v1beta/openai 端點")
     
     try:
         subprocess.run(["hermes", "gateway", "run"], check=True, env=env)
