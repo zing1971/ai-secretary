@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import logging
 import requests
+import re
 
 
 logging.basicConfig(
@@ -23,6 +24,34 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("AI-Secretary")
+
+
+def patch_hermes_config() -> None:
+    """
+    自動修復 ~/.hermes/config.yaml 中殘留的錯誤 Model ID (例如 gemini/gemini-1.5-flash)
+    確保其強制修正為 gemini-1.5-flash，避免引發 HTTP 400 錯誤。
+    """
+    config_path = os.path.expanduser("~/.hermes/config.yaml")
+    if not os.path.exists(config_path):
+        return
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # 使用正規表示式匹配可能帶有前綴的 model: 宣告，將其替換為標準的 model: gemini-1.5-flash
+        new_content = re.sub(
+            r'model:\s*(gemini/|google/)?gemini-1.5-flash.*',
+            'model: gemini-1.5-flash',
+            content
+        )
+
+        if new_content != content:
+            with open(config_path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+            logger.info("🔧 已自動修復 ~/.hermes/config.yaml 中的模型名稱為 gemini-1.5-flash")
+    except Exception as e:
+        logger.warning(f"⚠️  修復 config.yaml 時發生例外：{e}")
 
 
 def sync_persona() -> None:
@@ -93,6 +122,7 @@ def main() -> None:
         logger.error("環境變數驗證失敗，無法啟動。")
         sys.exit(1)
 
+    patch_hermes_config()
     sync_persona()
     inject_memory_to_soul()
 
