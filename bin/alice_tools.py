@@ -5,11 +5,18 @@ Alice 使用 terminal 工具呼叫此腳本，以存取所有 Google Workspace �
 
 Usage:
   alice calendar list
+  alice calendar range --from YYYY-MM-DD --to YYYY-MM-DD
   alice calendar create --title T --start "YYYY-MM-DD HH:MM" --end "YYYY-MM-DD HH:MM" [--desc D] [--location L]
+  alice calendar update --id ID [--title T] [--start S] [--end E] [--desc D] [--location L]
+  alice calendar delete --id ID
   alice gmail search [--query Q] [--max N]
+  alice gmail read --id MSG_ID
   alice gmail draft --to EMAIL --subject S --body B [--thread T]
+  alice gmail send --draft-id ID
+  alice gmail reply --thread T --to EMAIL --subject S --body B
   alice tasks list
   alice tasks add --title T [--notes N] [--due "RFC3339"]
+  alice tasks done --id ID
   alice drive search --keyword K [--max N]
   alice contacts search --query Q [--max N]
   alice contacts create --name N --email E [--phone P] [--company C] [--title T] [--label L]
@@ -74,6 +81,18 @@ def _build_parser() -> argparse.ArgumentParser:
     cc.add_argument("--end", required=True, metavar="DATETIME")
     cc.add_argument("--desc", default=None, metavar="DESCRIPTION")
     cc.add_argument("--location", default=None)
+    cr = cal_sub.add_parser("range", help="查詢日期範圍行程")
+    cr.add_argument("--from", required=True, dest="from_date", metavar="YYYY-MM-DD")
+    cr.add_argument("--to", required=True, dest="to_date", metavar="YYYY-MM-DD")
+    cu = cal_sub.add_parser("update", help="更新行程")
+    cu.add_argument("--id", required=True, dest="event_id")
+    cu.add_argument("--title", default=None)
+    cu.add_argument("--start", default=None, metavar="DATETIME")
+    cu.add_argument("--end", default=None, metavar="DATETIME")
+    cu.add_argument("--desc", default=None, metavar="DESCRIPTION")
+    cu.add_argument("--location", default=None)
+    cdel = cal_sub.add_parser("delete", help="刪除行程")
+    cdel.add_argument("--id", required=True, dest="event_id")
 
     # ── gmail ─────────────────────────────────────────────────────────────────
     gm = sub.add_parser("gmail", help="Gmail")
@@ -82,6 +101,8 @@ def _build_parser() -> argparse.ArgumentParser:
     gs.add_argument("--query", default=None,
                     help='Gmail 搜尋語法，例 "is:unread from:boss@example.com"')
     gs.add_argument("--max", type=int, default=10, dest="max_results")
+    gread = gm_sub.add_parser("read", help="讀取單封信件完整內容")
+    gread.add_argument("--id", required=True, dest="msg_id", help="信件 ID")
     gd = gm_sub.add_parser("draft", help="建立草稿")
     gd.add_argument("--to", required=True, dest="to_email")
     gd.add_argument("--subject", required=True)
@@ -89,6 +110,14 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="信件內文（純文字，換行用 \\n）")
     gd.add_argument("--thread", default=None, dest="thread_id",
                     help="回覆時的 threadId")
+    gsend = gm_sub.add_parser("send", help="發送草稿")
+    gsend.add_argument("--draft-id", required=True, dest="draft_id")
+    greply = gm_sub.add_parser("reply", help="直接回覆信件")
+    greply.add_argument("--thread", required=True, dest="thread_id")
+    greply.add_argument("--to", required=True, dest="to_email")
+    greply.add_argument("--subject", required=True)
+    greply.add_argument("--body", required=True, dest="body_text",
+                        help="回覆內文（純文字，換行用 \\n）")
 
     # ── tasks ─────────────────────────────────────────────────────────────────
     tk = sub.add_parser("tasks", help="Google Tasks")
@@ -99,6 +128,8 @@ def _build_parser() -> argparse.ArgumentParser:
     ta.add_argument("--notes", default=None)
     ta.add_argument("--due", default=None,
                     help='RFC3339，例 "2026-05-01T23:59:59Z"')
+    td = tk_sub.add_parser("done", help="標記任務完成")
+    td.add_argument("--id", required=True, dest="task_id")
 
     # ── drive ─────────────────────────────────────────────────────────────────
     dr = sub.add_parser("drive", help="Google Drive")
@@ -171,30 +202,62 @@ def _dispatch(args: argparse.Namespace) -> str:
     d = args.domain
 
     if d == "calendar":
-        from calendar_skills import get_todays_calendar_events, create_calendar_event
+        from calendar_skills import (
+            get_todays_calendar_events,
+            create_calendar_event,
+            get_calendar_events_range,
+            update_calendar_event,
+            delete_calendar_event,
+        )
         if args.action == "list":
             return get_todays_calendar_events()
         if args.action == "create":
             return create_calendar_event(
                 args.title, args.start, args.end, args.desc, args.location
             )
+        if args.action == "range":
+            return get_calendar_events_range(args.from_date, args.to_date)
+        if args.action == "update":
+            return update_calendar_event(
+                args.event_id, args.title, args.start, args.end,
+                args.desc, args.location,
+            )
+        if args.action == "delete":
+            return delete_calendar_event(args.event_id)
 
     elif d == "gmail":
-        from gmail_skills import search_recent_gmails, create_email_draft
+        from gmail_skills import (
+            search_recent_gmails,
+            read_email,
+            create_email_draft,
+            send_email_draft,
+            reply_to_email,
+        )
         if args.action == "search":
             return search_recent_gmails(args.query, args.max_results)
+        if args.action == "read":
+            return read_email(args.msg_id)
         if args.action == "draft":
             body = args.body_text.replace("\\n", "\n")
             return create_email_draft(
                 args.to_email, args.subject, body, args.thread_id
             )
+        if args.action == "send":
+            return send_email_draft(args.draft_id)
+        if args.action == "reply":
+            body = args.body_text.replace("\\n", "\n")
+            return reply_to_email(
+                args.thread_id, args.to_email, args.subject, body
+            )
 
     elif d == "tasks":
-        from tasks_skills import add_google_task, list_google_tasks
+        from tasks_skills import add_google_task, list_google_tasks, complete_google_task
         if args.action == "list":
             return list_google_tasks()
         if args.action == "add":
             return add_google_task(args.title, args.notes, args.due)
+        if args.action == "done":
+            return complete_google_task(args.task_id)
 
     elif d == "drive":
         from drive_skills import search_drive_files

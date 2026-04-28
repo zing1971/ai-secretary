@@ -19,11 +19,28 @@ def create_google_task(service, title, notes=None, due=None):
     result = service.tasks().insert(tasklist='@default', body=task).execute()
     return result
 
-def list_tasks(service):
-    """列出目前的任務清單。"""
-    results = service.tasks().list(tasklist='@default').execute()
-    items = results.get('items', [])
-    processed_tasks = []
-    for item in items:
-        processed_tasks.append(f"[{item.get('title')}] - {item.get('notes', '無備註')}")
-    return processed_tasks
+def list_tasks(service) -> list[dict]:
+    """列出目前的待辦任務清單（含 ID，不含已完成）。"""
+    results = service.tasks().list(tasklist='@default', showCompleted=False).execute()
+    return [
+        {
+            'id': item.get('id', ''),
+            'title': item.get('title', ''),
+            'notes': item.get('notes', ''),
+            'due': item.get('due', ''),
+            'status': item.get('status', 'needsAction'),
+        }
+        for item in results.get('items', [])
+    ]
+
+
+def complete_task(service, task_id: str) -> dict:
+    """將指定任務標記為已完成。"""
+    try:
+        return service.tasks().patch(
+            tasklist='@default',
+            task=task_id,
+            body={'status': 'completed'},
+        ).execute()
+    except Exception as exc:
+        raise RuntimeError(f"標記任務完成失敗 (task_id={task_id})：{exc}") from exc

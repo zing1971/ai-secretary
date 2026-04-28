@@ -133,3 +133,84 @@ def create_event(
         return service.events().insert(calendarId='primary', body=event_body).execute()
     except Exception as exc:
         raise RuntimeError(f"Google Calendar API 建立行程失敗：{exc}") from exc
+
+
+def get_events_range(service, from_date: str, to_date: str) -> list[str]:
+    """
+    取得指定日期範圍內的行程。
+
+    Args:
+        from_date: 開始日期，格式 "YYYY-MM-DD"
+        to_date:   結束日期，格式 "YYYY-MM-DD"（含當天到 23:59:59）
+    """
+    tz = pytz.timezone('Asia/Taipei')
+    fmt = "%Y-%m-%d"
+    try:
+        start_dt = tz.localize(datetime.datetime.strptime(from_date, fmt))
+        end_dt = tz.localize(datetime.datetime.strptime(to_date, fmt)).replace(
+            hour=23, minute=59, second=59
+        )
+    except ValueError as exc:
+        raise ValueError(f"日期格式不正確，請用 YYYY-MM-DD：{exc}") from exc
+    return get_events(service, start_dt.isoformat(), end_dt.isoformat())
+
+
+def update_event(
+    service,
+    event_id: str,
+    title: str = None,
+    start_time: str = None,
+    end_time: str = None,
+    description: str = None,
+    location: str = None,
+) -> dict:
+    """
+    更新已存在的 Google Calendar 行程（只修改提供的欄位）。
+    """
+    try:
+        existing = service.events().get(calendarId='primary', eventId=event_id).execute()
+    except Exception as exc:
+        raise RuntimeError(f"找不到行程 (event_id={event_id})：{exc}") from exc
+
+    patch: dict = {}
+    if title:
+        patch['summary'] = title
+    if description is not None:
+        patch['description'] = description
+    if location is not None:
+        patch['location'] = location
+
+    tz = pytz.timezone('Asia/Taipei')
+    fmt = "%Y-%m-%d %H:%M"
+    if start_time:
+        is_all_day = len(start_time) == 10 and ' ' not in start_time
+        if is_all_day:
+            patch['start'] = {'date': start_time}
+        else:
+            dt = tz.localize(datetime.datetime.strptime(start_time, fmt))
+            patch['start'] = {'dateTime': dt.isoformat(), 'timeZone': 'Asia/Taipei'}
+    if end_time:
+        is_all_day = len(end_time) == 10 and ' ' not in end_time
+        if is_all_day:
+            patch['end'] = {'date': end_time}
+        else:
+            dt = tz.localize(datetime.datetime.strptime(end_time, fmt))
+            patch['end'] = {'dateTime': dt.isoformat(), 'timeZone': 'Asia/Taipei'}
+
+    if not patch:
+        return existing
+
+    try:
+        return service.events().patch(
+            calendarId='primary', eventId=event_id, body=patch
+        ).execute()
+    except Exception as exc:
+        raise RuntimeError(f"更新行程失敗 (event_id={event_id})：{exc}") from exc
+
+
+def delete_event(service, event_id: str) -> None:
+    """刪除指定的 Google Calendar 行程。"""
+    try:
+        service.events().delete(calendarId='primary', eventId=event_id).execute()
+    except Exception as exc:
+        raise RuntimeError(f"刪除行程失敗 (event_id={event_id})：{exc}") from exc

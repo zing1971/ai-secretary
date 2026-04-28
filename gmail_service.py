@@ -64,23 +64,74 @@ def get_recent_emails(service, query=None, max_results=15):
     return email_list
 
 def create_gmail_draft(service, to_email, subject, body_text, thread_id=None):
-    """建立 Gmail 回覆草稿。"""
+    """建立 Gmail 草稿。"""
     message = EmailMessage()
     message.set_content(body_text)
     message['To'] = to_email
     message['Subject'] = subject
 
-    # 如果提供 thread_id，則關聯到特定討論串
     draft_body = {'message': {
         'raw': base64.urlsafe_b64encode(message.as_bytes()).decode()
     }}
-    
     if thread_id:
         draft_body['message']['threadId'] = thread_id
 
     try:
-        draft = service.users().drafts().create(userId='me', body=draft_body).execute()
-        return draft
+        return service.users().drafts().create(userId='me', body=draft_body).execute()
     except Exception as e:
         print(f"建立草稿失敗: {e}")
+        return None
+
+
+def send_draft(service, draft_id: str) -> dict | None:
+    """發送已存在的 Gmail 草稿。"""
+    try:
+        return service.users().drafts().send(
+            userId='me', body={'id': draft_id}
+        ).execute()
+    except Exception as e:
+        print(f"發送草稿失敗 (draft_id={draft_id}): {e}")
+        return None
+
+
+def get_email(service, msg_id: str) -> dict | None:
+    """取得單封信件的完整內容（含標頭與正文）。"""
+    try:
+        msg_data = service.users().messages().get(
+            userId='me', id=msg_id, format='full'
+        ).execute()
+        payload = msg_data.get('payload', {})
+        headers = {h['name']: h['value'] for h in payload.get('headers', [])}
+        body = extract_email_body(payload)
+        return {
+            'id': msg_id,
+            'threadId': msg_data.get('threadId'),
+            'subject': headers.get('Subject', '無主旨'),
+            'from': headers.get('From', ''),
+            'to': headers.get('To', ''),
+            'date': headers.get('Date', ''),
+            'body': body or msg_data.get('snippet', ''),
+            'url': f"https://mail.google.com/mail/u/0/#inbox/{msg_id}",
+        }
+    except Exception as e:
+        print(f"讀取信件失敗 (msg_id={msg_id}): {e}")
+        return None
+
+
+def send_reply(service, thread_id: str, to_email: str, subject: str, body_text: str) -> dict | None:
+    """直接發送回覆（不存草稿）到指定討論串。"""
+    reply_subject = subject if subject.lower().startswith('re:') else f"Re: {subject}"
+    message = EmailMessage()
+    message.set_content(body_text)
+    message['To'] = to_email
+    message['Subject'] = reply_subject
+
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    try:
+        return service.users().messages().send(
+            userId='me',
+            body={'raw': raw, 'threadId': thread_id},
+        ).execute()
+    except Exception as e:
+        print(f"發送回覆失敗 (thread_id={thread_id}): {e}")
         return None
