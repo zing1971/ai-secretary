@@ -31,7 +31,7 @@ def patch_hermes_config() -> None:
     強制覆寫 ~/.hermes/config.yaml 的 model 區段，確保使用正確的：
     - provider: gemini（Google AI Studio）
     - base_url: Google 的 OpenAI 相容端點（v1beta/openai）
-    - model: gemini-1.5-flash
+    - model: gemini-2.5-flash
     - api_key: 從 GEMINI_API_KEY / GOOGLE_API_KEY 注入
 
     根本原因：Hermes 的 gemini provider 預設 base_url 為 v1beta（純 REST），
@@ -56,7 +56,7 @@ def patch_hermes_config() -> None:
         # 若已存在 model 區段則替換，否則在開頭插入
         model_block = (
             "model:\n"
-            f"  default: gemini-1.5-flash\n"
+            f"  default: gemini-2.5-flash\n"
             f"  provider: gemini\n"
             f"  base_url: {google_openai_base_url}\n"
             + (f"  api_key: {api_key}\n" if api_key else "")
@@ -81,7 +81,7 @@ def patch_hermes_config() -> None:
 
         logger.info(
             f"🔧 已修復 ~/.hermes/config.yaml："
-            f"provider=gemini, model=gemini-1.5-flash, base_url={google_openai_base_url}"
+            f"provider=gemini, model=gemini-2.5-flash, base_url={google_openai_base_url}"
         )
     except Exception as e:
         logger.warning(f"⚠️  修復 config.yaml 時發生例外：{e}")

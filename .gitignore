@@ -6,3 +6,7 @@ __pycache__/
 *$py.class
 venv/
 .vscode/
+.omc/
+.claude/worktrees/
+*.bak
+temp_test/
