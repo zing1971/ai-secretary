@@ -5,4 +5,5 @@ google-genai
 python-dotenv
 requests
 pytz
+duckduckgo-search
 git+https://github.com/nousresearch/hermes-agent.git
