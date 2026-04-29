@@ -18,6 +18,9 @@ Usage:
   alice tasks add --title T [--notes N] [--due "RFC3339"]
   alice tasks done --id ID
   alice drive search --keyword K [--max N]
+  alice drive read --id FILE_ID
+  alice web search --query Q [--max N]
+  alice translate --text T --to LANG [--from LANG]
   alice contacts search --query Q [--max N]
   alice contacts create --name N --email E [--phone P] [--company C] [--title T] [--label L]
   alice generate --task T [--context C]
@@ -137,6 +140,23 @@ def _build_parser() -> argparse.ArgumentParser:
     ds = dr_sub.add_parser("search", help="搜尋檔案")
     ds.add_argument("--keyword", required=True)
     ds.add_argument("--max", type=int, default=5, dest="max_results")
+    dread = dr_sub.add_parser("read", help="讀取檔案內容")
+    dread.add_argument("--id", required=True, dest="file_id", help="Drive 檔案 ID")
+
+    # ── web ───────────────────────────────────────────────────────────────────
+    wb = sub.add_parser("web", help="Web 搜尋")
+    wb_sub = wb.add_subparsers(dest="action")
+    ws = wb_sub.add_parser("search", help="搜尋網路資訊")
+    ws.add_argument("--query", required=True, help="搜尋關鍵字或問題")
+    ws.add_argument("--max", type=int, default=5, dest="max_results")
+
+    # ── translate ─────────────────────────────────────────────────────────────
+    tr = sub.add_parser("translate", help="多語言翻譯")
+    tr.add_argument("--text", required=True, help="要翻譯的文字")
+    tr.add_argument("--to", required=True, dest="to_lang",
+                    help='目標語言，例 "繁體中文"、"English"、"日本語"')
+    tr.add_argument("--from", default=None, dest="from_lang",
+                    help="來源語言（可選，不填自動偵測）")
 
     # ── contacts ──────────────────────────────────────────────────────────────
     ct = sub.add_parser("contacts", help="Google Contacts")
@@ -260,9 +280,20 @@ def _dispatch(args: argparse.Namespace) -> str:
             return complete_google_task(args.task_id)
 
     elif d == "drive":
-        from drive_skills import search_drive_files
+        from drive_skills import search_drive_files, read_drive_file
         if args.action == "search":
             return search_drive_files(args.keyword, args.max_results)
+        if args.action == "read":
+            return read_drive_file(args.file_id)
+
+    elif d == "web":
+        from web_skills import search_web
+        if args.action == "search":
+            return search_web(args.query, args.max_results)
+
+    elif d == "translate":
+        from translate_skills import translate_text
+        return translate_text(args.text, args.to_lang, args.from_lang)
 
     elif d == "contacts":
         from contacts_skills import search_contacts, create_contact_entry
@@ -307,7 +338,7 @@ def main() -> None:
         sys.exit(1)
 
     # Check sub-action where required
-    needs_action = {"calendar", "gmail", "tasks", "drive", "contacts", "memory"}
+    needs_action = {"calendar", "gmail", "tasks", "drive", "web", "contacts", "memory"}
     if args.domain in needs_action and not getattr(args, "action", None):
         # Print sub-parser help
         for action in parser._subparsers._actions:  # noqa: SLF001

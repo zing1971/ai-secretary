@@ -1,5 +1,5 @@
 """
-Google Drive 技能：根據關鍵字搜尋檔案。
+Google Drive 技能：搜尋檔案、讀取檔案內容。
 """
 
 import os as _os, sys as _sys
@@ -7,6 +7,23 @@ _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 
 from _skill_base import _DRIVE_IDX, _require_service
 from drive_service import DriveService
+
+
+def read_drive_file(file_id: str) -> str:
+    """
+    讀取 Google Drive 檔案的文字內容。
+
+    Args:
+        file_id: Drive 檔案 ID（必填）。
+    """
+    service = _require_service(_DRIVE_IDX, "Google Drive")
+    ds = DriveService(service)
+    info = ds.read_file(file_id)
+    return (
+        f"📄 {info['name']} ({info['mimeType']})\n"
+        f"{'─' * 40}\n"
+        f"{info['content']}"
+    )
 
 
 def search_drive_files(keyword: str, max_results: int = 5) -> str:

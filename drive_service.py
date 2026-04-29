@@ -1,7 +1,7 @@
 """
 Google Drive API 服務模組
 
-提供 Drive 低階操作：列出檔案、建立資料夾、移動檔案。
+提供 Drive 低階操作：列出檔案、建立資料夾、移動檔案、讀取檔案內容。
 只掃描根目錄散檔（非資料夾內的檔案）。
 """
 import logging
@@ -10,6 +10,15 @@ logger = logging.getLogger(__name__)
 
 # Google Drive 資料夾 MIME 類型
 FOLDER_MIME = "application/vnd.google-apps.folder"
+
+# Google Workspace 格式 → 匯出格式對照表
+_EXPORT_MAP = {
+    "application/vnd.google-apps.document": "text/plain",
+    "application/vnd.google-apps.spreadsheet": "text/csv",
+    "application/vnd.google-apps.presentation": "text/plain",
+}
+
+_READ_MAX_CHARS = 4000
 
 
 class DriveService:
@@ -132,6 +141,52 @@ class DriveService:
             return result.get("name", "")
         except Exception:
             return ""
+
+    def read_file(self, file_id: str) -> dict:
+        """
+        讀取 Drive 檔案的文字內容。
+
+        Google Workspace 格式（Docs/Sheets/Slides）自動匯出為純文字/CSV；
+        一般文字檔直接下載。內容超過 _READ_MAX_CHARS 時截斷。
+
+        Returns:
+            dict: {name, mimeType, content}
+
+        Raises:
+            RuntimeError: 檔案不存在或讀取失敗。
+        """
+        try:
+            meta = self.service.files().get(
+                fileId=file_id, fields="name,mimeType"
+            ).execute()
+        except Exception as exc:
+            raise RuntimeError(f"找不到檔案 (file_id={file_id})：{exc}") from exc
+
+        name = meta["name"]
+        mime = meta["mimeType"]
+
+        try:
+            if mime in _EXPORT_MAP:
+                content_bytes = self.service.files().export(
+                    fileId=file_id, mimeType=_EXPORT_MAP[mime]
+                ).execute()
+            else:
+                content_bytes = self.service.files().get_media(
+                    fileId=file_id
+                ).execute()
+        except Exception as exc:
+            raise RuntimeError(f"讀取檔案內容失敗 (file_id={file_id})：{exc}") from exc
+
+        content = (
+            content_bytes.decode("utf-8", errors="replace")
+            if isinstance(content_bytes, bytes)
+            else str(content_bytes)
+        )
+        if len(content) > _READ_MAX_CHARS:
+            content = content[:_READ_MAX_CHARS] + f"\n\n…（已截斷，原始長度 {len(content)} 字元）"
+
+        logger.info("📄 讀取 Drive 檔案：%s (%s)", name, mime)
+        return {"name": name, "mimeType": mime, "content": content}
 
     def search_files_by_keyword(self, keyword: str, max_results: int = 5) -> list:
         """
