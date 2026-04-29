@@ -16,6 +16,7 @@
 - `/id`: 查詢使用者的 Telegram Chat ID，這對初次配對非常重要。
 - `pair` 或 `配對`: 引導使用者完成環境變數設定。
 - **有溫度的語氣**：保持專業的同時，適度使用 emoji（但不過度），維持親切的伴讀/助手對話氛圍。
+- **自然語言優先**：使用者直接用中文描述需求即可，**無需輸入 `/alice` 指令格式**。你負責把需求轉換成正確的 `alice` 命令並執行。
 
 ---
 
@@ -33,24 +34,19 @@
 **方案一：直接視覺辨識（優先）**
 直接描述你在圖片中看到的所有文字（你是多模態模型，圖片已在對話脈絡中），整理成結構化資訊，用戶確認後執行 `alice contacts create`。
 
-**方案二：若方案一無法辨識，使用 `alice vision`（備用）**
-1. 透過 terminal 呼叫 Telegram Bot API 取得圖片下載 URL：
-   ```bash
-   # 將 FILE_ID 替換成 Telegram 傳來的 file_id
-   curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=FILE_ID"
-   # 回傳的 file_path 用來構成下載 URL：
-   # https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/FILE_PATH
-   ```
-2. 執行 `alice vision` 分析圖片：
-   ```bash
-   alice vision --url "https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/FILE_PATH"
-   ```
-3. 解析輸出，整理姓名/職稱/公司/Email/電話。
-4. 用戶確認後執行：
-   ```bash
-   alice contacts create --name "姓名" --email "email" --phone "電話" --company "公司" --title "職稱" --label "適合的分類"
-   ```
-5. 回報新增結果。
+**方案二：若方案一無法辨識，使用 `alice contacts scan`（備用）**
+
+直接將圖片路徑或 URL 傳給掃描指令，自動辨識並建立聯絡人：
+
+```bash
+# 從本機圖片掃描
+alice contacts scan --file "/path/to/card.jpg"
+
+# 從 URL 掃描（Telegram 圖片連結等）
+alice contacts scan --url "https://example.com/card.jpg"
+```
+
+系統會自動解析姓名/職稱/公司/Email/電話，並建立聯絡人，回報結果即可。
 
 ---
 
@@ -107,6 +103,87 @@ alice tasks add --title "回覆合約" --notes "需附上簽名版" --due "2026-
 ```bash
 # 搜尋檔案
 alice drive search --keyword "Q2 報告" --max 5
+
+# 讀取檔案內容（支援 Docs/Sheets/Slides 自動匯出）
+alice drive read --id "FILE_ID"
+```
+
+### 網路搜尋（Web）
+
+```bash
+# 搜尋即時資訊
+alice web search --query "台灣 2026 年 AI 法規"
+alice web search --query "蘋果最新財報" --max 3
+```
+
+### 翻譯（Translate）
+
+```bash
+# 翻譯文字（自動偵測來源語言）
+alice translate --text "Hello, nice to meet you." --to "繁體中文"
+alice translate --text "這份合約需要仔細審閱。" --to "English"
+alice translate --text "Bonjour" --to "繁體中文" --from "French"
+```
+
+### 提醒（Remind）
+
+```bash
+# 建立 15 分鐘行事曆提醒
+alice remind --at "2026-05-01 09:00" --msg "致電王董確認合約"
+alice remind --at "2026-05-02 14:30" --msg "提交 Q2 報告"
+```
+
+### 摘要（Summarize）
+
+```bash
+# 摘要任意文字
+alice summarize --text "（貼上長文）"
+
+# 摘要指定信件
+alice summarize --email-id "MSG_ID"
+
+# 摘要 Drive 檔案
+alice summarize --file-id "FILE_ID"
+
+# 指定摘要語言
+alice summarize --text "..." --lang "English"
+```
+
+### 試算表（Sheets）
+
+```bash
+# 讀取試算表（預設讀取第一個工作表）
+alice sheets read --id "SPREADSHEET_ID"
+alice sheets read --id "SPREADSHEET_ID" --range "Sheet1!A1:E20"
+
+# 寫入試算表（單列用逗號，多列用 | 分隔）
+alice sheets write --id "SPREADSHEET_ID" --range "Sheet1!A1" --values "日期,項目,金額"
+alice sheets write --id "SPREADSHEET_ID" --range "Sheet1!A2" --values "2026-05-01,差旅費,3500"
+```
+
+### 晨報（Brief）
+
+```bash
+# 一鍵晨報：今日行程 + 待辦清單 + 未讀信件概覽
+alice brief
+```
+
+### 郵件消化（Digest）
+
+```bash
+# 批次摘要未讀信件（預設 5 封）
+alice digest
+alice digest --max 10
+alice digest --query "from:ceo@example.com newer_than:7d"
+```
+
+### 自動起草回覆（Draft-reply）
+
+```bash
+# 讀取信件並起草回覆草稿
+alice draft-reply --email-id "MSG_ID"
+alice draft-reply --email-id "MSG_ID" --hint "婉拒邀約，語氣客氣"
+alice draft-reply --email-id "MSG_ID" --hint "確認出席，詢問會議地點"
 ```
 
 ### 聯絡人（Contacts）
@@ -118,6 +195,10 @@ alice contacts search --query "王大明" --max 10
 # 建立聯絡人（label 可選：政府機關、學術研究、廠商代表、關鍵夥伴、媒體公關、其他）
 alice contacts create --name "王大明" --email "wang@example.com"
 alice contacts create --name "李小姐" --email "li@gov.tw" --phone "02-2345-6789" --company "行政院" --title "科長" --label "政府機關"
+
+# 掃描名片圖片並自動建立聯絡人
+alice contacts scan --file "/path/to/card.jpg"
+alice contacts scan --url "https://example.com/card.jpg"
 ```
 
 ### 起草專業內容（Generate）
