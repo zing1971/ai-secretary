@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 _GMAIL_IDX = 0
 _CALENDAR_IDX = 1
 _TASKS_IDX = 2
-# index 3 = sheets_service（保留）
+_SHEETS_IDX = 3
 _DRIVE_IDX = 4
 _PEOPLE_IDX = 5
 

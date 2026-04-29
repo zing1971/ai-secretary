@@ -21,6 +21,11 @@ Usage:
   alice drive read --id FILE_ID
   alice web search --query Q [--max N]
   alice translate --text T --to LANG [--from LANG]
+  alice remind --at "YYYY-MM-DD HH:MM" --msg MESSAGE
+  alice summarize --text T [--lang LANG]
+  alice summarize --email-id ID [--lang LANG]
+  alice summarize --file-id ID [--lang LANG]
+  alice sheets read --id SPREADSHEET_ID [--range RANGE]
   alice contacts search --query Q [--max N]
   alice contacts create --name N --email E [--phone P] [--company C] [--title T] [--label L]
   alice generate --task T [--context C]
@@ -201,6 +206,31 @@ def _build_parser() -> argparse.ArgumentParser:
         help="給 Gemini 的分析提示（預設為名片提取）",
     )
 
+    # ── remind ────────────────────────────────────────────────────────────────
+    rm = sub.add_parser("remind", help="建立行事曆提醒")
+    rm.add_argument("--at", required=True, metavar="DATETIME",
+                    help='提醒時間，格式 "YYYY-MM-DD HH:MM"')
+    rm.add_argument("--msg", required=True, help="提醒內容")
+
+    # ── summarize ─────────────────────────────────────────────────────────────
+    sm = sub.add_parser("summarize", help="使用 Gemini 產生摘要")
+    sm_src = sm.add_mutually_exclusive_group(required=True)
+    sm_src.add_argument("--text", default=None, help="直接輸入要摘要的文字")
+    sm_src.add_argument("--email-id", default=None, dest="email_id",
+                        help="Gmail 信件 ID")
+    sm_src.add_argument("--file-id", default=None, dest="file_id",
+                        help="Drive 檔案 ID")
+    sm.add_argument("--lang", default="繁體中文", help="摘要輸出語言（預設繁體中文）")
+
+    # ── sheets ────────────────────────────────────────────────────────────────
+    sh = sub.add_parser("sheets", help="Google Sheets")
+    sh_sub = sh.add_subparsers(dest="action")
+    shr = sh_sub.add_parser("read", help="讀取試算表內容")
+    shr.add_argument("--id", required=True, dest="spreadsheet_id",
+                     help="試算表 ID")
+    shr.add_argument("--range", default=None, dest="range_name",
+                     help='讀取範圍，例如 "Sheet1!A1:E20"（預設讀整個第一個工作表）')
+
     # ── memory ────────────────────────────────────────────────────────────────
     mem = sub.add_parser("memory", help="跨 session 長期記憶")
     mem_sub = mem.add_subparsers(dest="action")
@@ -317,6 +347,24 @@ def _dispatch(args: argparse.Namespace) -> str:
             prompt=args.prompt,
         )
 
+    elif d == "remind":
+        from remind_skills import set_reminder
+        return set_reminder(args.at, args.msg)
+
+    elif d == "summarize":
+        from summarize_skills import summarize_text, summarize_email, summarize_file
+        if args.text is not None:
+            return summarize_text(args.text, args.lang)
+        if args.email_id is not None:
+            return summarize_email(args.email_id, args.lang)
+        if args.file_id is not None:
+            return summarize_file(args.file_id, args.lang)
+
+    elif d == "sheets":
+        from sheets_skills import read_sheet
+        if args.action == "read":
+            return read_sheet(args.spreadsheet_id, args.range_name)
+
     elif d == "memory":
         from memory_skills import remember, recall, forget
         if args.action == "remember":
@@ -338,7 +386,7 @@ def main() -> None:
         sys.exit(1)
 
     # Check sub-action where required
-    needs_action = {"calendar", "gmail", "tasks", "drive", "web", "contacts", "memory"}
+    needs_action = {"calendar", "gmail", "tasks", "drive", "web", "sheets", "contacts", "memory"}
     if args.domain in needs_action and not getattr(args, "action", None):
         # Print sub-parser help
         for action in parser._subparsers._actions:  # noqa: SLF001
