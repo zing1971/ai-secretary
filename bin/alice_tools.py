@@ -26,6 +26,12 @@ Usage:
   alice summarize --email-id ID [--lang LANG]
   alice summarize --file-id ID [--lang LANG]
   alice sheets read --id SPREADSHEET_ID [--range RANGE]
+  alice sheets write --id SPREADSHEET_ID --range RANGE --values "v1,v2|v3,v4"
+  alice brief
+  alice digest [--query Q] [--max N]
+  alice draft-reply --email-id ID [--hint "回覆要點"]
+  alice contacts scan --file PATH
+  alice contacts scan --url URL
   alice contacts search --query Q [--max N]
   alice contacts create --name N --email E [--phone P] [--company C] [--title T] [--label L]
   alice generate --task T [--context C]
@@ -177,6 +183,10 @@ def _build_parser() -> argparse.ArgumentParser:
     ctc.add_argument("--title", default=None, dest="job_title")
     ctc.add_argument("--label", default=None,
                      help="可選：政府機關、學術研究、廠商代表、關鍵夥伴、媒體公關、其他")
+    ctsc = ct_sub.add_parser("scan", help="掃描名片圖片並建立聯絡人")
+    ctsc_src = ctsc.add_mutually_exclusive_group(required=True)
+    ctsc_src.add_argument("--file", default=None, dest="image_file", help="本地圖片路徑")
+    ctsc_src.add_argument("--url", default=None, dest="image_url", help="圖片 URL")
 
     # ── generate ──────────────────────────────────────────────────────────────
     gen = sub.add_parser("generate",
@@ -230,6 +240,31 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="試算表 ID")
     shr.add_argument("--range", default=None, dest="range_name",
                      help='讀取範圍，例如 "Sheet1!A1:E20"（預設讀整個第一個工作表）')
+    shw = sh_sub.add_parser("write", help="寫入試算表儲存格")
+    shw.add_argument("--id", required=True, dest="spreadsheet_id", help="試算表 ID")
+    shw.add_argument("--range", required=True, dest="range_name",
+                     help='寫入起始範圍，例如 "Sheet1!A1"')
+    shw.add_argument("--values", required=True,
+                     help='儲存格內容。單列："v1,v2,v3"；多列用 | 分隔："r1c1,r1c2|r2c1,r2c2"')
+
+    # ── brief ─────────────────────────────────────────────────────────────────
+    sub.add_parser("brief", help="今日晨報（行程 + 待辦 + 未讀信件）")
+
+    # ── digest ────────────────────────────────────────────────────────────────
+    dg = sub.add_parser("digest", help="批次郵件摘要")
+    dg.add_argument("--query", default="is:unread",
+                    help='Gmail 搜尋條件（預設 "is:unread"）')
+    dg.add_argument("--max", type=int, default=5, dest="max_results")
+
+    # ── draft-reply ───────────────────────────────────────────────────────────
+    dr2 = sub.add_parser("draft-reply", help="讀取信件並自動起草回覆草稿")
+    dr2.add_argument("--email-id", required=True, dest="email_id", help="Gmail 信件 ID")
+    dr2.add_argument("--hint", default=None,
+                     help='回覆要點提示，例如「婉拒邀約，語氣客氣」')
+
+    # ── contacts scan ─────────────────────────────────────────────────────────
+    # 注意：contacts 已存在，在 contacts sub-parsers 補上 scan
+    # 但 contacts parser 已在前面建立，這裡直接加 action
 
     # ── memory ────────────────────────────────────────────────────────────────
     mem = sub.add_parser("memory", help="跨 session 長期記憶")
@@ -325,6 +360,18 @@ def _dispatch(args: argparse.Namespace) -> str:
         from translate_skills import translate_text
         return translate_text(args.text, args.to_lang, args.from_lang)
 
+    elif d == "brief":
+        from brief_skills import get_morning_brief
+        return get_morning_brief()
+
+    elif d == "digest":
+        from digest_skills import digest_emails
+        return digest_emails(args.query, args.max_results)
+
+    elif d == "draft-reply":
+        from draft_reply_skills import draft_reply
+        return draft_reply(args.email_id, args.hint)
+
     elif d == "contacts":
         from contacts_skills import search_contacts, create_contact_entry
         if args.action == "search":
@@ -333,6 +380,12 @@ def _dispatch(args: argparse.Namespace) -> str:
             return create_contact_entry(
                 args.name, args.email, args.phone,
                 args.company, args.job_title, args.label,
+            )
+        if args.action == "scan":
+            from contacts_scan_skills import scan_business_card
+            return scan_business_card(
+                image_file=args.image_file,
+                image_url=args.image_url,
             )
 
     elif d == "generate":
@@ -361,9 +414,11 @@ def _dispatch(args: argparse.Namespace) -> str:
             return summarize_file(args.file_id, args.lang)
 
     elif d == "sheets":
-        from sheets_skills import read_sheet
+        from sheets_skills import read_sheet, write_sheet
         if args.action == "read":
             return read_sheet(args.spreadsheet_id, args.range_name)
+        if args.action == "write":
+            return write_sheet(args.spreadsheet_id, args.range_name, args.values)
 
     elif d == "memory":
         from memory_skills import remember, recall, forget

@@ -9,6 +9,28 @@ from _skill_base import _SHEETS_IDX, _require_service
 from sheets_service import SheetsService
 
 
+def write_sheet(spreadsheet_id: str, range_name: str, values_str: str) -> str:
+    """
+    寫入 Google Sheets 試算表儲存格。
+
+    Args:
+        spreadsheet_id: 試算表 ID（必填）。
+        range_name: 寫入起始範圍，例如 "Sheet1!A1"（必填）。
+        values_str: 儲存格內容。單列用逗號分隔 "v1,v2,v3"；
+                    多列用 | 分隔列 "r1c1,r1c2|r2c1,r2c2"（必填）。
+    """
+    service = _require_service(_SHEETS_IDX, "Google Sheets")
+    ss = SheetsService(service)
+    rows = [
+        [cell.strip() for cell in row.split(",")]
+        for row in values_str.split("|")
+    ]
+    result = ss.write_range(spreadsheet_id, range_name, rows)
+    updated_cells = result.get("updatedCells", 0)
+    updated_range = result.get("updatedRange", range_name)
+    return f"✅ 已寫入 {updated_cells} 個儲存格到 {updated_range}"
+
+
 def read_sheet(spreadsheet_id: str, range_name: str = None) -> str:
     """
     讀取 Google Sheets 試算表，以表格格式輸出。

@@ -64,3 +64,34 @@ class SheetsService:
 
         logger.info("📊 讀取試算表 '%s' 範圍 %s: %d 列", title, range_name, len(rows))
         return {"title": title, "range": result.get("range", range_name), "rows": rows}
+
+    def write_range(self, spreadsheet_id: str, range_name: str, values: list) -> dict:
+        """
+        寫入試算表指定範圍的資料。
+
+        Args:
+            spreadsheet_id: 試算表 ID
+            range_name: 寫入範圍，例如 "Sheet1!A1"
+            values: 二維陣列 [[row1col1, row1col2], [row2col1, ...]]
+
+        Returns:
+            dict: API 回傳結果（含 updatedRange, updatedCells）
+
+        Raises:
+            RuntimeError: 寫入失敗。
+        """
+        try:
+            result = self.service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+                valueInputOption="USER_ENTERED",
+                body={"values": values},
+            ).execute()
+        except Exception as exc:
+            raise RuntimeError(f"寫入範圍 '{range_name}' 失敗：{exc}") from exc
+
+        logger.info(
+            "✏️ 寫入試算表 %s 範圍 %s: %d 格",
+            spreadsheet_id, range_name, result.get("updatedCells", 0),
+        )
+        return result
