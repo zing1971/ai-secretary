@@ -4,7 +4,17 @@
 """
 
 import logging
+import os as _os
+import sys as _sys
 import threading
+
+# 使用 realpath 解析符號連結，確保從 ~/.hermes/skills/ symlink 載入時
+# 仍能正確找到 ai-secretary 根目錄（calendar_service、google_auth 等）
+_SKILLS_DIR = _os.path.dirname(_os.path.realpath(__file__))
+_APP_DIR = _os.path.dirname(_SKILLS_DIR)
+for _p in (_APP_DIR, _SKILLS_DIR):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
 
 from google_auth import get_google_services
 

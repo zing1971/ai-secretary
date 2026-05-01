@@ -1,45 +1,14 @@
 """
-Alice Tools - CLI wrapper for AI Secretary Google Workspace skills.
+Alice Tools - 除錯用 CLI（已改為 Hermes skill 直呼模式）
 
-Alice 使用 terminal 工具呼叫此腳本，以存取所有 Google Workspace 功能。
+所有 Google Workspace 操作已移至 Hermes skill 函數，Hermes 直接呼叫，
+不再透過此 CLI。此檔案僅供本機除錯測試用途。
 
-Usage:
-  alice calendar list
-  alice calendar range --from YYYY-MM-DD --to YYYY-MM-DD
-  alice calendar create --title T --start "YYYY-MM-DD HH:MM" --end "YYYY-MM-DD HH:MM" [--desc D] [--location L]
-  alice calendar update --id ID [--title T] [--start S] [--end E] [--desc D] [--location L]
-  alice calendar delete --id ID
-  alice gmail search [--query Q] [--max N]
-  alice gmail read --id MSG_ID
-  alice gmail draft --to EMAIL --subject S --body B [--thread T]
-  alice gmail send --draft-id ID
-  alice gmail reply --thread T --to EMAIL --subject S --body B
-  alice tasks list
-  alice tasks add --title T [--notes N] [--due "RFC3339"]
-  alice tasks done --id ID
-  alice drive search --keyword K [--max N]
-  alice drive read --id FILE_ID
-  alice web search --query Q [--max N]
-  alice translate --text T --to LANG [--from LANG]
-  alice remind --at "YYYY-MM-DD HH:MM" --msg MESSAGE
-  alice summarize --text T [--lang LANG]
-  alice summarize --email-id ID [--lang LANG]
-  alice summarize --file-id ID [--lang LANG]
-  alice sheets read --id SPREADSHEET_ID [--range RANGE]
-  alice sheets write --id SPREADSHEET_ID --range RANGE --values "v1,v2|v3,v4"
-  alice brief
-  alice digest [--query Q] [--max N]
-  alice draft-reply --email-id ID [--hint "回覆要點"]
-  alice contacts scan --file PATH
-  alice contacts scan --url URL
-  alice contacts search --query Q [--max N]
-  alice contacts create --name N --email E [--phone P] [--company C] [--title T] [--label L]
-  alice generate --task T [--context C]
-  alice memory remember --topic T --content C
-  alice memory recall [--query Q]
-  alice memory forget --topic T
-  alice vision --url URL [--prompt P]
-  alice vision --file PATH [--prompt P]
+除錯用法（本機直接測試 skill 函數）：
+  python alice_tools.py calendar list
+  python alice_tools.py gmail search --query "is:unread"
+  python alice_tools.py tasks list
+  ...（其他命令語法不變）
 """
 
 import os

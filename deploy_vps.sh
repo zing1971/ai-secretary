@@ -12,6 +12,12 @@ echo "=========================================="
 echo "  AI Secretary - Hermes Agent Deployment"
 echo "=========================================="
 
+# Step 0: System Timezone & NTP
+echo ""
+echo "-> Step 0: Setting timezone to Asia/Taipei..."
+sudo timedatectl set-timezone Asia/Taipei
+echo "  Timezone: $(timedatectl | grep 'Time zone')"
+
 # Step 1: Check System Dependencies
 echo ""
 echo "-> Step 1: Checking system dependencies..."
@@ -148,17 +154,15 @@ chmod +x "$APP_DIR/bin/alice"
 chmod +x "$APP_DIR/bin/alice_tools.py"
 echo "  Executable permissions set."
 
-# Remove old skills to prevent conflicts
+# Remove legacy monolithic skill file if exists
 rm -f "$HERMES_DIR/skills/google_workspace_skills.py"
-rm -f "$HERMES_DIR/skills/calendar_skills.py"
-rm -f "$HERMES_DIR/skills/gmail_skills.py"
-rm -f "$HERMES_DIR/skills/tasks_skills.py"
-rm -f "$HERMES_DIR/skills/drive_skills.py"
-rm -f "$HERMES_DIR/skills/contacts_skills.py"
-rm -f "$HERMES_DIR/skills/generation_skills.py"
-rm -f "$HERMES_DIR/skills/memory_skills.py"
-rm -f "$HERMES_DIR/skills/_skill_base.py"
-echo "  Old skills cleaned up."
+
+# Symlink all ai-secretary skills into hermes skills dir
+echo "  Linking ai-secretary skills → ~/.hermes/skills/..."
+for _sf in "$APP_DIR/skills"/*.py; do
+    ln -sf "$_sf" "$HERMES_DIR/skills/$(basename "$_sf")"
+done
+echo "  Skills linked ($(ls "$HERMES_DIR/skills/"*.py 2>/dev/null | wc -l | tr -d ' ') files)."
 
 # Step 7b: Linking ai-secretary to venv
 echo ""
