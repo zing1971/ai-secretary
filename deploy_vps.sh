@@ -154,15 +154,17 @@ chmod +x "$APP_DIR/bin/alice"
 chmod +x "$APP_DIR/bin/alice_tools.py"
 echo "  Executable permissions set."
 
-# Remove legacy monolithic skill file if exists
+# Remove old skills to prevent conflicts
 rm -f "$HERMES_DIR/skills/google_workspace_skills.py"
-
-# Symlink all ai-secretary skills into hermes skills dir
-echo "  Linking ai-secretary skills → ~/.hermes/skills/..."
-for _sf in "$APP_DIR/skills"/*.py; do
-    ln -sf "$_sf" "$HERMES_DIR/skills/$(basename "$_sf")"
-done
-echo "  Skills linked ($(ls "$HERMES_DIR/skills/"*.py 2>/dev/null | wc -l | tr -d ' ') files)."
+rm -f "$HERMES_DIR/skills/calendar_skills.py"
+rm -f "$HERMES_DIR/skills/gmail_skills.py"
+rm -f "$HERMES_DIR/skills/tasks_skills.py"
+rm -f "$HERMES_DIR/skills/drive_skills.py"
+rm -f "$HERMES_DIR/skills/contacts_skills.py"
+rm -f "$HERMES_DIR/skills/generation_skills.py"
+rm -f "$HERMES_DIR/skills/memory_skills.py"
+rm -f "$HERMES_DIR/skills/_skill_base.py"
+echo "  Old skills cleaned up."
 
 # Step 7b: Linking ai-secretary to venv
 echo ""
